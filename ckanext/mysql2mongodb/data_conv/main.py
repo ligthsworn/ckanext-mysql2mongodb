@@ -13,7 +13,7 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 			raise Exception()
 		os.system("whoami")
 		os.chdir("/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv")
-		os.system("ll")
+		# os.system("ll")
 		os.system(f"mkdir -p ./downloads/{resource_id}")
 		os.system(f"curl -o ./downloads/{resource_id}/{sql_file_name} {sql_file_url}")
 
@@ -22,6 +22,7 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 
 		schema_name = sql_file_name.split(".")[0]
 
+		pprint(db_conf)
 		mysql_host = db_conf["mysql_host"]
 		mysql_username = db_conf["mysql_username"]
 		mysql_password = db_conf["mysql_password"]

@@ -1,6 +1,6 @@
 mysql_host = 'mysql'
 mysql_username = 'dangsg'
-mysql_password = 'Db@12345678'
+mysql_password = 'Db12345678'
 mysql_port = '3306'
 
 mongodb_host = 'mongo'
