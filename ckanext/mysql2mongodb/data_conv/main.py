@@ -35,7 +35,7 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 		mysql_cur.close()
 		mysql_conn.close()
 		
-		os.system(f"mysql -h {mysql_host} -u {mysql_username} --password{mysql_password} {schema_name} < ./downloads/{resource_id}/{sql_file_name}")
+		os.system(f"mysql -h {mysql_host} -u {mysql_username} --password={mysql_password} {schema_name} < ./downloads/{resource_id}/{sql_file_name}")
 		
 		schema_conv_init_option = ConvInitOption(host = mysql_host, username = mysql_username, password = mysql_password, port = mysql_port, dbname = mysql_dbname)
 
