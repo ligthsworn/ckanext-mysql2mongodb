@@ -1,6 +1,7 @@
 from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
 from ckanext.mysql2mongodb.data_conv.database_connection import ConvInitOption, ConvOutputOption
 from ckanext.mysql2mongodb.data_conv.data_conversion import DataConversion
+from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql
 import urllib, json, re, os, requests
 from pprint import pprint
 
@@ -22,14 +23,19 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 
 		schema_name = sql_file_name.split(".")[0]
 
-		pprint(db_conf)
 		mysql_host = db_conf["mysql_host"]
 		mysql_username = db_conf["mysql_username"]
 		mysql_password = db_conf["mysql_password"]
 		mysql_port = db_conf["mysql_port"]
 		mysql_dbname = schema_name
+
+		mysql_conn = open_connection_mysql(mysql_host, mysql_username, mysql_password)
+		mysql_cur = mysql_conn.cursor()
+		mysql_cur.execute(f"CREATE DATABASE {mysql_dbname};")
+		mysql_cur.close()
+		mysql_conn.close()
 		
-		os.system(f"mysql -h {mysql_host} -u {mysql_username} -p {mysql_password} {schema_name} < ./downloads/{resource_id}/{sql_file_name}")
+		os.system(f"mysql -h {mysql_host} -u {mysql_username} --password{mysql_password} {schema_name} < ./downloads/{resource_id}/{sql_file_name}")
 		
 		schema_conv_init_option = ConvInitOption(host = mysql_host, username = mysql_username, password = mysql_password, port = mysql_port, dbname = mysql_dbname)
 

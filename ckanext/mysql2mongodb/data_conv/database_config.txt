@@ -1,5 +1,5 @@
 mysql_host = 'mysql'
-mysql_username = 'dangsg'
+mysql_username = 'root'
 mysql_password = 'Db12345678'
 mysql_port = '3306'
 
