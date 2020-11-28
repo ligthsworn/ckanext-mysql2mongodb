@@ -86,7 +86,7 @@ class SchemaConversion:
 		"""
 		command_create_intermediate_dir = f"mkdir -p ./intermediate_data/{self.schema_conv_init_option.dbname}"
 		os.system(command_create_intermediate_dir)
-		command = f"schemacrawler.sh \
+		command = f"_schemacrawler/schemacrawler.sh \
 		--server=mysql \
 		--host={self.schema_conv_init_option.host} \
 		--port={self.schema_conv_init_option.port} \
@@ -98,7 +98,7 @@ class SchemaConversion:
 		--command=serialize\
 		--output-file=./intermediate_data/{self.schema_conv_init_option.dbname}/{self.schema_filename}"
 		os.system(command)
-		print(f"Generate MySQL database {self.schema_conv_init_option.dbname} successfully!")
+		print(f"Generate MySQL database {self.schema_conv_init_option.dbname} schema successfully!")
 		return True
 
 
@@ -299,6 +299,7 @@ class SchemaConversion:
 				vexpr = {"$jsonSchema": json_schema}
 				cmd = OrderedDict([('collMod', table), ('validator', vexpr)])
 				db_connection.command(cmd)
+		print("Create validator done!")
 		
 
 	def data_type_schema_mapping(self, mysql_type):
@@ -410,6 +411,7 @@ class SchemaConversion:
 						# 		collection.create_index([(col_dict[idx_uuid], TEXT) for idx_uuid in index_cols], unique = index_unique)
 						# else:
 							# print(f"MySQL index type {index_type} has not been handled!")
+		
 
 
 	def get_coluuid(self, table_name, col_name):
