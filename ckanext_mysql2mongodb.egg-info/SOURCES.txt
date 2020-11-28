@@ -1,0 +1,17 @@
+LICENSE
+MANIFEST.in
+README.rst
+requirements.txt
+setup.cfg
+setup.py
+ckanext/__init__.py
+ckanext/mysql2mongodb/__init__.py
+ckanext/mysql2mongodb/plugin.py
+ckanext/mysql2mongodb/tests/__init__.py
+ckanext/mysql2mongodb/tests/test_plugin.py
+ckanext_mysql2mongodb.egg-info/PKG-INFO
+ckanext_mysql2mongodb.egg-info/SOURCES.txt
+ckanext_mysql2mongodb.egg-info/dependency_links.txt
+ckanext_mysql2mongodb.egg-info/entry_points.txt
+ckanext_mysql2mongodb.egg-info/namespace_packages.txt
+ckanext_mysql2mongodb.egg-info/top_level.txt
