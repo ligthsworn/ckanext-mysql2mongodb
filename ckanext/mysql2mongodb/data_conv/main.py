@@ -12,7 +12,7 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 			print("Invalided MySQL backup file extension!")
 			raise Exception()
 
-		os.chdir("/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv")
+		os.chdir("/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv")
 		os.system(f"mkdir -p ./downloads/{resource_id}")
 		os.system(f"curl -o ./downloads/{resource_id}/{sql_file_name} {sql_file_url}")
 

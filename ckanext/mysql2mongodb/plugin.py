@@ -7,8 +7,8 @@ class Mysql2MongodbPlugin(plugins.SingletonPlugin):
     plugins.implements(plugins.IResourceController)
 
     def after_create(self, context, resource):
-        pprint.pprint(context)
-        pprint.pprint(resource)
+        #pprint.pprint(context)
+        #pprint.pprint(resource)
         # os.system("pwd")
         # os.system("whoami")
         sql_file_name = resource["name"]
