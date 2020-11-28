@@ -11,8 +11,9 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 		if sql_file_name.split(".")[1] != "sql":
 			print("Invalided MySQL backup file extension!")
 			raise Exception()
-
+		os.system("whoami")
 		os.chdir("/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv")
+		os.system("ll")
 		os.system(f"mkdir -p ./downloads/{resource_id}")
 		os.system(f"curl -o ./downloads/{resource_id}/{sql_file_name} {sql_file_url}")
 
@@ -27,7 +28,7 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 		mysql_port = db_conf["mysql_port"]
 		mysql_dbname = schema_name
 		
-		os.system(f"mysql -u {mysql_username} -p {mysql_password} {schema_name} < ./downloads/{resource_id}/{sql_file_name}")
+		os.system(f"mysql -h {mysql_host} -u {mysql_username} -p {mysql_password} {schema_name} < ./downloads/{resource_id}/{sql_file_name}")
 		
 		schema_conv_init_option = ConvInitOption(host = mysql_host, username = mysql_username, password = mysql_password, port = mysql_port, dbname = mysql_dbname)
 
@@ -47,7 +48,7 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 		mysql2mongodb.run()
 
 		os.system(f"mkdir -p mongodump_files")
-		os.system(f"mongodump --username {mongodb_username} --password {mongodb_password} --authenticationDatabase admin --db {mongodb_dbname} -o mongodump_files/")
+		os.system(f"mongodump --username {mongodb_username} --password {mongodb_password} --host {mongodb_host} --port {mongodb_port} --authenticationDatabase admin --db {mongodb_dbname} -o mongodump_files/")
 		os.chdir("./mongodump_files")
 		os.system(f"zip -r {schema_name}.zip {schema_name}/*")
 

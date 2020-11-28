@@ -615,6 +615,8 @@ class DataConversion:
 		"""
 		datas = load_mongodb_collection(
 			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.username, 
+			self.schema_conv_output_option.password, 
 			self.schema_conv_output_option.port, 
 			self.schema_conv_output_option.dbname, 
 			collection_name
@@ -777,9 +779,12 @@ class DataConversion:
 		# val_cur = val_conn.cursor()
 
 		mongodb_conn = open_connection_mongodb(
-			self.schema_conv_output_option.host, 
-			self.schema_conv_output_option.port,
-			self.schema_conv_output_option.dbname)
+			self.schema_conv_output_option.host,
+			self.schema_conv_output_option.username,
+			self.schema_conv_output_option.password,
+			self.schema_conv_output_option.port, 
+			self.schema_conv_output_option.dbname
+			)
 
 		# for table in self.schema.get_tables_name_list():
 		# 	mongo_count = mongodb_conn[table].count() 
@@ -909,9 +914,12 @@ class DataConversion:
 		fetched_data_list = self.get_fetched_data_list(table_name)
 		convert_data_list = self.store_fetched_data_to_mongodb(table_name, fetched_data_list)
 		mongodb_connection = open_connection_mongodb(
-			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.host,
+			self.schema_conv_output_option.username,
+			self.schema_conv_output_option.password,
 			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname)
+			self.schema_conv_output_option.dbname
+			)
 		store_json_to_mongodb(mongodb_connection, table_name, convert_data_list)
 		
 	def get_fetched_data_list(self, table_name):
@@ -1082,7 +1090,9 @@ class DataConversion:
 		Convert one relation of MySQL table to database reference of MongoDB
 		"""
 		db_connection = open_connection_mongodb(
-			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.host,
+			self.schema_conv_output_option.username,
+			self.schema_conv_output_option.password,
 			self.schema_conv_output_option.port, 
 			self.schema_conv_output_option.dbname
 			)

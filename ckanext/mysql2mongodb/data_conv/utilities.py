@@ -73,12 +73,12 @@ def store_json_to_mongodb(mongodb_connection, collection_name, json_data):
 		print(e)
 		raise e
 
-def drop_mongodb_database(host, port, dbname):
+def drop_mongodb_database(host, username, password, port, dbname):
 	"""
 	Drop MongoDB database.
 	Be useful, just use this function at the begining of conversion.
 	"""
-	connection_string = f"mongodb://{host}:{port}/"
+	connection_string = f"mongodb://{username}:{password}@{host}:{port}/"
 	try:
 		# Making connection 
 		mongo_client = MongoClient(connection_string)  
@@ -89,12 +89,13 @@ def drop_mongodb_database(host, port, dbname):
 		print(e)
 		raise e
 
-def open_connection_mongodb(host, port, dbname):
+def open_connection_mongodb(host, username, password, port, dbname):
 	"""
 	Set up a connection to MongoDB database.
 	Return a MongoClient object if success.
+	mongodb://myDBReader:D1fficultP%40ssw0rd@mongodb0.example.com:27017/?authSource=admin
 	"""
-	connection_string = f"mongodb://{host}:{port}/"
+	connection_string = f"mongodb://{username}:{password}@{host}:{port}/"
 	try:
 		# Making connection 
 		mongo_client = MongoClient(connection_string)  
@@ -106,11 +107,11 @@ def open_connection_mongodb(host, port, dbname):
 		print(e)
 		raise e
 
-def load_mongodb_collection(host, port, dbname, collection_name):
+def load_mongodb_collection(host, username, password, port, dbname, collection_name):
 	"""
 	Load all documents from MongoDB collection.
 	"""
-	mongodb_connection = open_connection_mongodb(host, port, dbname)
+	mongodb_connection = open_connection_mongodb(host, username, password, port, dbname)
 	collection = mongodb_connection[collection_name]
 	docs = collection.find()
 	res = [doc for doc in docs]
@@ -147,10 +148,10 @@ def open_connection_mysql(host, username, password, dbname = None):
 	# 	with open(f"./intermediate_data/{self.schema_conv_init_option.dbname}/{filename}", 'w') as outfile:
 	# 		json.dump(json_data, outfile, default=str)
 
-if __name__ == '__main__':
-	mongodb_host = 'localhost'
-	mongodb_username = ''
-	mongodb_password = ''
-	mongodb_port = '27017'
-	mongodb_dbname = 'sakila'
-	load_mongodb_collection(mongodb_host, mongodb_port, mongodb_dbname, "original_schema")
+# if __name__ == '__main__':
+# 	mongodb_host = 'localhost'
+# 	mongodb_username = ''
+# 	mongodb_password = ''
+# 	mongodb_port = '27017'
+# 	mongodb_dbname = 'sakila'
+# 	load_mongodb_collection(mongodb_host, mongodb_port, mongodb_dbname, "original_schema")
