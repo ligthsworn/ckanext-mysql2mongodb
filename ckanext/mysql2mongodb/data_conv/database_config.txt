@@ -1,0 +1,9 @@
+mysql_host = 'localhost'
+mysql_username = 'dangsg'
+mysql_password = 'Db@12345678'
+mysql_port = '3306'
+
+mongodb_host = 'localhost'
+mongodb_username = 'dangsg'
+mongodb_password = 'Db@12345678'
+mongodb_port = '27017'

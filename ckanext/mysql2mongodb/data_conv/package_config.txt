@@ -1,0 +1,2 @@
+package_id = 'mysql2mongodb_dataset'
+X-CKAN-API-Key = '11e7956f-39ef-4830-b84f-00453df9f182'

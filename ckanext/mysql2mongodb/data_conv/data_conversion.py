@@ -80,7 +80,7 @@ class DataConversion:
 			print("Disconnected to MySQL Server version ", mysql_connection.get_server_info())
 
 
-		self.evaluate_validating()
+		self.write_validation_log()
 
 	def create_validated_database(self):
 		"""
@@ -748,37 +748,108 @@ class DataConversion:
 		# 			table_seq[str(i)] = table_seq[str(i)] + [key]
 		# return table_seq 
 
-	def evaluate_validating(self):
-		ori_conn = open_connection_mysql(
-			self.schema_conv_init_option.host, 
-			self.schema_conv_init_option.username, 
-			self.schema_conv_init_option.password,
-			self.schema_conv_init_option.dbname
+	def write_validation_log(self):
+		"""
+		Write validation log to MongoDB
+		Dict(
+			<key>: <table name>,
+			<value>: Dict(
+				schema: <schema log>,
+				data: <data log>
 			)
-		ori_cur = ori_conn.cursor()
+		)
+		"""
+		print("Start writing log!")
+		# ori_conn = open_connection_mysql(
+		# 	self.schema_conv_init_option.host, 
+		# 	self.schema_conv_init_option.username, 
+		# 	self.schema_conv_init_option.password,
+		# 	self.schema_conv_init_option.dbname
+		# 	)
+		# ori_cur = ori_conn.cursor()
 
-		val_conn = open_connection_mysql(
-			self.schema_conv_init_option.host, 
-			self.schema_conv_init_option.username, 
-			self.schema_conv_init_option.password,
-			self.validated_dbname
-			)
-		val_cur = val_conn.cursor()
+		# val_conn = open_connection_mysql(
+		# 	self.schema_conv_init_option.host, 
+		# 	self.schema_conv_init_option.username, 
+		# 	self.schema_conv_init_option.password,
+		# 	self.validated_dbname
+		# 	)
+		# val_cur = val_conn.cursor()
 
 		mongodb_conn = open_connection_mongodb(
 			self.schema_conv_output_option.host, 
 			self.schema_conv_output_option.port,
 			self.schema_conv_output_option.dbname)
 
-		for table in self.schema.get_tables_name_list():
-			mongo_count = mongodb_conn[table].count() 
-			sql = f"select count(*) from {table};"
-			ori_cur.execute(sql)
-			val_cur.execute(sql)
-			ori_data = ori_cur.fetchall()	
-			val_data = val_cur.fetchall()	
-			print(ori_data[0][0], mongo_count, val_data[0][0])
+		# for table in self.schema.get_tables_name_list():
+		# 	mongo_count = mongodb_conn[table].count() 
+		# 	sql = f"select count(*) from {table};"
+		# 	ori_cur.execute(sql)
+		# 	val_cur.execute(sql)
+		# 	ori_data = ori_cur.fetchall()	
+		# 	val_data = val_cur.fetchall()	
+		# 	print(ori_data[0][0], mongo_count, val_data[0][0])
 
+		mysql_conn = open_connection_mysql(
+			self.schema_conv_init_option.host, 
+			self.schema_conv_init_option.username, 
+			self.schema_conv_init_option.password,
+			)
+		mysql_cur = mysql_conn.cursor()
+
+		table_columns_list = self.schema.get_table_column_and_data_type()
+
+		for table_name in self.schema.get_tables_name_list():
+			schema_validating_sql = f"""
+				SELECT column_name,ordinal_position,data_type,column_type FROM
+				(
+				    SELECT
+				        column_name,ordinal_position,
+				        data_type,column_type,COUNT(1) rowcount
+				    FROM information_schema.columns
+				    WHERE
+				    (
+				        (table_schema='{self.schema_conv_init_option.dbname}' AND table_name='{table_name}') OR
+				        (table_schema='{self.validated_dbname}' AND table_name='{table_name}')
+				    )
+				    GROUP BY
+				        column_name,ordinal_position,
+				        data_type,column_type
+				    HAVING COUNT(1)=1
+				) A;
+			"""
+
+			columns_of_table = list(table_columns_list[table_name])
+			columns_sql = ",".join(columns_of_table)
+
+			data_validating_sql = f"""
+				select {columns_sql}
+				from
+				(
+					SELECT * FROM {self.schema_conv_init_option.dbname}.{table_name} as A
+					union all
+					SELECT * FROM {self.validated_dbname}.{table_name} as B
+				) as C
+				group by {columns_sql}
+				having count(*) = 1
+			"""
+
+			log_data = {}
+			log_data["table-name"] = table_name
+
+			mysql_cur.execute(schema_validating_sql)
+			schema_validating_data = mysql_cur.fetchall()
+			log_data["schema"] = schema_validating_data
+
+			mysql_cur.execute(data_validating_sql)
+			data_validating_data = mysql_cur.fetchall()
+			log_data["data"] = data_validating_data
+
+			store_json_to_mongodb(mongodb_conn, "validating_log", log_data)
+
+		mysql_cur.close()
+		mysql_conn.close()
+		print("Writing log done!")
 
 
 	def find_converted_dtype(self, mysql_dtype):

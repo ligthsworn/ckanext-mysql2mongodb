@@ -1,88 +1,134 @@
 from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
 from ckanext.mysql2mongodb.data_conv.database_connection import ConvInitOption, ConvOutputOption
 from ckanext.mysql2mongodb.data_conv.data_conversion import DataConversion
-import urllib, json, pprint, re, os, requests
+import urllib, json, re, os, requests
+from pprint import pprint
 
 
-def data_conv(resource_id, sql_file_name, sql_file_url):
-	os.chdir("/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv")
-	# os.system(f"mkdir -p ./downloads/{resource_id}")
-	# os.system(f"curl -o ./downloads/{resource_id}/{sql_file_name} {sql_file_url}")
-	schema_name = sql_file_name.split(".")[0]
-	# pprint.pprint("set_config")
-	# schema_name = "sakila"
-	os.system(f"mysql -u dangsg -p Db@12345678 {schema_name} < ./downloads/{resource_id}/{sql_file_name}")
+def convert_data(resource_id, sql_file_name, sql_file_url):
+	try:
+		pprint("Start conversion!")
+		if sql_file_name.split(".")[1] != "sql":
+			print("Invalided MySQL backup file extension!")
+			raise Exception()
 
-	mysql_host = 'localhost'
-	mysql_username = 'dangsg'
-	mysql_password = 'Db@12345678'
-	mysql_port = '3306'
-	mysql_dbname = schema_name
-	schema_conv_init_option = ConvInitOption(host = mysql_host, username = mysql_username, password = mysql_password, port = mysql_port, dbname = mysql_dbname)
+		os.chdir("/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv")
+		os.system(f"mkdir -p ./downloads/{resource_id}")
+		os.system(f"curl -o ./downloads/{resource_id}/{sql_file_name} {sql_file_url}")
 
-	mongodb_host = 'localhost'
-	mongodb_username = 'dangsg'
-	mongodb_password = 'Db@12345678'
-	mongodb_port = '27017'
-	mongodb_dbname = schema_name
-	schema_conv_output_option = ConvOutputOption(host = mongodb_host, username = mongodb_username, password = mongodb_password, port = mongodb_port, dbname = mongodb_dbname)
+		db_conf = read_database_config()
+		package_conf = read_package_config()
 
-	schema_conversion = SchemaConversion()
-	schema_conversion.set_config(schema_conv_init_option, schema_conv_output_option)
-	schema_conversion.run()
+		schema_name = sql_file_name.split(".")[0]
 
-	mysql2mongodb = DataConversion()
-	mysql2mongodb.set_config(schema_conv_init_option, schema_conv_output_option, schema_conversion)
-	mysql2mongodb.run()
+		mysql_host = db_conf["mysql_host"]
+		mysql_username = db_conf["mysql_username"]
+		mysql_password = db_conf["mysql_password"]
+		mysql_port = db_conf["mysql_port"]
+		mysql_dbname = schema_name
+		
+		os.system(f"mysql -u {mysql_username} -p {mysql_password} {schema_name} < ./downloads/{resource_id}/{sql_file_name}")
+		
+		schema_conv_init_option = ConvInitOption(host = mysql_host, username = mysql_username, password = mysql_password, port = mysql_port, dbname = mysql_dbname)
 
-	os.system(f"mkdir -p mongodump_files")
-	os.system(f"mongodump --username {mongodb_username} --password {mongodb_password} --authenticationDatabase admin --db {mongodb_dbname} -o mongodump_files/")
-	os.chdir("./mongodump_files")
-	os.system(f"zip -r {schema_name}.zip {schema_name}/*")
+		mongodb_host = db_conf["mongodb_host"]
+		mongodb_username = db_conf["mongodb_username"]
+		mongodb_password = db_conf["mongodb_password"]
+		mongodb_port = db_conf["mongodb_port"]
+		mongodb_dbname = schema_name
+		schema_conv_output_option = ConvOutputOption(host = mongodb_host, username = mongodb_username, password = mongodb_password, port = mongodb_port, dbname = mongodb_dbname)
 
-	requests.post('http://localhost:5000/api/action/resource_create',
-          data={"package_id":"hoang_dang_data_set", "name":f"{schema_name}.zip"},
-          headers={"X-CKAN-API-Key": "589a95e9-89fa-4c71-a186-1ae30f014ed3"},
-          files={'upload': open(f"{schema_name}.zip", 'rb')})
+		schema_conversion = SchemaConversion()
+		schema_conversion.set_config(schema_conv_init_option, schema_conv_output_option)
+		schema_conversion.run()
 
-	pprint.pprint("Done!")
-	return True
-	# pass
-#!/usr/bin/env python
+		mysql2mongodb = DataConversion()
+		mysql2mongodb.set_config(schema_conv_init_option, schema_conv_output_option, schema_conversion)
+		mysql2mongodb.run()
 
-# def data_conv():
-	# pass
-	# # Put the details of the dataset we're going to create into a dict.
-	# dataset_dict = {
-	#     'name': 'my_dataset_name',
-	#     'notes': 'A long description of my dataset',
-	#     'owner_org': 'org_id_or_name'
-	# }
+		os.system(f"mkdir -p mongodump_files")
+		os.system(f"mongodump --username {mongodb_username} --password {mongodb_password} --authenticationDatabase admin --db {mongodb_dbname} -o mongodump_files/")
+		os.chdir("./mongodump_files")
+		os.system(f"zip -r {schema_name}.zip {schema_name}/*")
 
-	# # Use the json module to dump the dictionary to a string for posting.
-	# data_string = urllib.quote(json.dumps(dataset_dict))
+		response = requests.post('http://localhost:5000/api/action/resource_create',
+	          data={"package_id":package_conf["package_id"], "name":f"{schema_name}-{resource_id}.zip"},
+	          headers={"X-CKAN-API-Key": package_conf["X-CKAN-API-Key"]},
+	          files={'upload': open(f"{schema_name}.zip", 'rb')})
 
-	# # We'll use the package_create function to create a new dataset.
-	# request = urllib2.Request(
-	#     'http://www.my_ckan_site.com/api/action/package_create')
+		pprint(response.content)
 
-	# # Creating a dataset requires an authorization header.
-	# # Replace *** with your API key, from your user account on the CKAN site
-	# # that you're creating the dataset on.
-	# request.add_header('Authorization', '***')
+		pprint("Done!")
+		return True
 
-	# # Make the HTTP request.
-	# response = urllib2.urlopen(request, data_string)
-	# assert response.code == 200
+	except Exception as e:
+		pprint(e)
+		pprint("Convert fail!")
 
-	# # Use the json module to load CKAN's response into a dictionary.
-	# response_dict = json.loads(response.read())
-	# assert response_dict['success'] is True
+def read_package_config(file_url = "package_config.txt"):
+	try:
+		package_conf = {}
+		with open(file_url, "r") as f:
+			lines = f.readlines()
 
-	# # package_create returns the created package as its result.
-	# created_package = response_dict['result']
-	# pprint.pprint(created_package)
+		for line in lines:
+			look_for_conf = re.search("^package_id", line.strip(), re.IGNORECASE)
+			if look_for_conf is not None:
+				package_conf["package_id"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+
+			look_for_conf = re.search("^X-CKAN-API-Key", line.strip(), re.IGNORECASE)
+			if look_for_conf is not None:
+				package_conf["X-CKAN-API-Key"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+
+		return package_conf
 
 
-if __name__ == '__main__':
-	data_conv("66d52da5-1b0d-4de7-9890-9fab9e64ddda", "sakila.sql", None)
+	except Exception as e:
+		pprint(e)
+		pprint("Failed while read package config!")
+
+def read_database_config():
+	try:
+		db_conf = {}
+		file_url = "database_config.txt"
+		with open(file_url, "r") as f:
+			lines = f.readlines()
+
+		for line in lines:
+			look_for_conf = re.search("^mysql_host", line.strip(), re.IGNORECASE)
+			if look_for_conf is not None:
+				db_conf["mysql_host"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+
+			look_for_conf = re.search("^mysql_port", line.strip(), re.IGNORECASE)
+			if look_for_conf is not None:
+				db_conf["mysql_port"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+
+			look_for_conf = re.search("^mysql_password", line.strip(), re.IGNORECASE)
+			if look_for_conf is not None:
+				db_conf["mysql_password"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+
+			look_for_conf = re.search("^mysql_username", line.strip(), re.IGNORECASE)
+			if look_for_conf is not None:
+				db_conf["mysql_username"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+
+			look_for_conf = re.search("^mongodb_host", line.strip(), re.IGNORECASE)
+			if look_for_conf is not None:
+				db_conf["mongodb_host"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+
+			look_for_conf = re.search("^mongodb_username", line.strip(), re.IGNORECASE)
+			if look_for_conf is not None:
+				db_conf["mongodb_username"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+
+			look_for_conf = re.search("^mongodb_port", line.strip(), re.IGNORECASE)
+			if look_for_conf is not None:
+				db_conf["mongodb_port"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+
+			look_for_conf = re.search("^mongodb_password", line.strip(), re.IGNORECASE)
+			if look_for_conf is not None:
+				db_conf["mongodb_password"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+
+		return db_conf
+		
+	except Exception as e:
+		print(e)
+		print("Failed while reading database config!")
