@@ -4,6 +4,7 @@ import mysql.connector
 from pymongo import MongoClient
 import json 
 import sys
+import urllib.parse
  		 
 def extract_dict(selected_keys):
 	"""
@@ -78,6 +79,8 @@ def drop_mongodb_database(host, username, password, port, dbname):
 	Drop MongoDB database.
 	Be useful, just use this function at the begining of conversion.
 	"""
+	username = urllib.parse.quote_plus(username)
+	password = urllib.parse.quote_plus(password)
 	connection_string = f"mongodb://{username}:{password}@{host}:{port}/"
 	try:
 		# Making connection 
@@ -95,6 +98,8 @@ def open_connection_mongodb(host, username, password, port, dbname):
 	Return a MongoClient object if success.
 	mongodb://myDBReader:D1fficultP%40ssw0rd@mongodb0.example.com:27017/?authSource=admin
 	"""
+	username = urllib.parse.quote_plus(username)
+	password = urllib.parse.quote_plus(password)
 	connection_string = f"mongodb://{username}:{password}@{host}:{port}/"
 	try:
 		# Making connection 
