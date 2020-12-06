@@ -31,7 +31,7 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 
 		mysql_conn = open_connection_mysql(mysql_host, mysql_username, mysql_password)
 		mysql_cur = mysql_conn.cursor()
-		mysql_cur.execute(f"CREATE DATABASE IF NOT EXISTS {mysql_dbname};")
+		mysql_cur.execute("CREATE DATABASE IF NOT EXISTS %s;", (mysql_dbname,))
 		mysql_cur.close()
 		mysql_conn.close()
 		

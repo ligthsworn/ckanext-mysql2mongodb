@@ -470,6 +470,8 @@ class SchemaConversion:
 		converted_schema["tables"] = []
 		converted_schema["foreign-keys"] = []
 
+		triggers_dict = self.get_triggers_dict()
+
 		tables_schema = catalog_schema["tables"]
 		for table_schema in tables_schema:
 			table_info = {}
@@ -488,19 +490,9 @@ class SchemaConversion:
 					table_info["constraints"].append(table_constraint)
 
 			table_info["triggers"] = []
-			for table_schema_trigger in table_schema["triggers"]:
-				if type(table_schema_trigger) is dict:
-					table_trigger = {
-						"name": table_schema_trigger["name"],
-						"action-condition" : table_schema_trigger["action-condition"],
-						"action-order" : table_schema_trigger["action-order"],
-						"action-orientation" : table_schema_trigger["action-orientation"],
-						"action-statement" : table_schema_trigger["action-statement"],
-						"condition-timing" : table_schema_trigger["condition-timing"],
-						"event-manipulation-type" : table_schema_trigger["event-manipulation-type"],
-					}
-					table_info["triggers"].append(table_trigger)
-
+			if table_info["name"] in triggers_dict:
+				table_info["triggers"] = triggers_dict[table_info["name"]]
+			
 			columns_schema = self.db_schema["all-table-columns"]
 			table_info["columns"] = []
 			for column_schema in columns_schema:
@@ -549,14 +541,101 @@ class SchemaConversion:
 						"update-rule": foreign_key_schema["update-rule"],
 					}
 					converted_schema["foreign-keys"].append(foreign_key_info)
+
+		converted_schema["procedures"] = self.get_procedures_list()
+		converted_schema["functions"] = self.get_functions_list()
+		# print(converted_schema["procedures"])
+		# print(converted_schema["functions"])
 		
-		mongodb_connection = open_connection_mongodb(
-			self.schema_conv_output_option.host,
-			self.schema_conv_output_option.username,
-			self.schema_conv_output_option.password,
-			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname
-			) 
+		mongodb_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname) 
 		store_json_to_mongodb(mongodb_connection, "schema_view", converted_schema)
 		print(f"Save schema view from {self.schema_conv_output_option.dbname} database to MongoDB successfully!")
 		return True
+
+	def get_triggers_dict(self):
+		"""
+		Get triggers dict of database.
+		Dict(
+			<table name>: List[
+				Dict(
+					"trigger-name": <trigger name>,
+					"event": <event>,
+					"statement": <statement>,
+					"timing": <timing>,
+				)
+			]
+		)
+		"""
+		mysql_connection = open_connection_mysql(
+			self.schema_conv_init_option.host, 
+			self.schema_conv_init_option.username, 
+			self.schema_conv_init_option.password,
+			self.schema_conv_init_option.dbname
+			)
+		mysql_cursor = mysql_connection.cursor()
+		mysql_cursor.execute("SHOW TRIGGERS;")
+		# triggers_list = [fetched_data for fetched_data in mysql_cursor]
+		triggers_list = mysql_cursor.fetchall()
+		mysql_cursor.close()
+		mysql_connection.close()
+		triggers_dict = {}
+		for trigger in triggers_list:
+			triggers_dict[trigger[2].decode("utf-8")] = []
+		for trigger in triggers_list:
+			trigger_info = {
+				"trigger-name": trigger[0],
+				"envent": trigger[1].decode("utf-8"),
+				"statement": trigger[3].decode("utf-8"),
+				"timing": trigger[4].decode("utf-8")
+			}
+			triggers_dict[trigger[2].decode("utf-8")].append(trigger_info)
+		return triggers_dict
+
+	def get_procedures_list(self):
+		"""
+		Get list of procedures of database
+		"""
+		mysql_connection = open_connection_mysql(
+			self.schema_conv_init_option.host, 
+			self.schema_conv_init_option.username, 
+			self.schema_conv_init_option.password,
+			self.schema_conv_init_option.dbname
+			)
+		mysql_cursor = mysql_connection.cursor()
+		mysql_cursor.execute("SHOW PROCEDURE STATUS WHERE db=%s;", (self.schema_conv_init_option.dbname,))
+		# print(mysql_cursor.fetchall())
+		procedure_name_list = list(map(lambda proc: proc[1], mysql_cursor.fetchall()))
+		# print(procedure_name_list)
+		procedures_list = []
+		for procedure_name in procedure_name_list:
+			mysql_cursor.execute(f"SHOW CREATE PROCEDURE {procedure_name};")#, (procedure_name,))
+			procedures_list.append({
+				"procedure-name": procedure_name,
+				"procedure-creation": mysql_cursor.fetchone()[2]
+				})
+
+		return procedures_list
+
+
+	def get_functions_list(self):
+		"""
+		Get list of functions of database
+		"""
+		mysql_connection = open_connection_mysql(
+			self.schema_conv_init_option.host, 
+			self.schema_conv_init_option.username, 
+			self.schema_conv_init_option.password,
+			self.schema_conv_init_option.dbname
+			)
+		mysql_cursor = mysql_connection.cursor()
+		mysql_cursor.execute("SHOW FUNCTION STATUS WHERE db=%s;", (self.schema_conv_init_option.dbname,))
+		functions_name_list = list(map(lambda func: func[1], mysql_cursor.fetchall()))
+		functions_list = []
+		for function_name in functions_name_list:
+			mysql_cursor.execute(f"SHOW CREATE FUNCTION {function_name};")
+			functions_list.append({
+				"function-name": function_name,
+				"function-creation": mysql_cursor.fetchone()[2]
+				})
+
+		return functions_list

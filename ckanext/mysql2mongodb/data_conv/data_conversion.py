@@ -33,7 +33,7 @@ class DataConversion:
 
 	def run(self):
 		self.__save()
-		# self.validate()
+		self.validate()
 
 	def __save(self):
 		tic = time.time()
@@ -41,7 +41,6 @@ class DataConversion:
 		toc = time.time()
 		time_taken=round((toc-tic)*1000, 1)
 		print(f"Time for migrating MySQL to MongoDB: {time_taken}")
-		self.validate()
 		self.convert_relations_to_references()
 
 	def validate(self):
@@ -99,13 +98,13 @@ class DataConversion:
 		# print(mysql_table_list)
 
 		if self.validated_dbname in mysql_table_list:
-			mycursor.execute(f"DROP DATABASE {self.validated_dbname}")
+			mycursor.execute("DROP DATABASE %s;", (self.validated_dbname,))
 		
 		# print("DROPPPPPPPPPPPPPPPPPPPPPPPPPPPP")
 		# print(self.validated_dbname)
 		# print(mysql_table_list)
 		
-		mycursor.execute(f"CREATE DATABASE {self.validated_dbname}")
+		mycursor.execute("CREATE DATABASE %s;", (self.validated_dbname,))
 		mycursor.close()
 		mydb.close()
 		print("Disconnected to MySQL Server version ", mydb.get_server_info())
@@ -239,14 +238,14 @@ class DataConversion:
 
 		sql_creating_columns_and_key_cmd = sql_creating_columns_cmd + ",\n" + sql_creating_key_cmd 
 		#sql create table
-		sql_creating_table_cmd = f"""CREATE TABLE {table_info["table-name"]} (\n{sql_creating_columns_and_key_cmd}\n) ENGINE={table_info["engine"]}"""# DEFAULT CHARSET={table_info["table-collation"]};"""
+		sql_creating_table_cmd = """CREATE TABLE %s (\n%s\n) ENGINE=%s"""# DEFAULT CHARSET={table_info["table-collation"]};"""
 		# print(sql_creating_table_cmd)
 		
 		# create table
 		# if table_info["table-name"] == "staff":
 		# print(sql_creating_table_cmd)
 		mycursor = mysql_connection.cursor()
-		mycursor.execute(sql_creating_table_cmd)
+		mycursor.execute(sql_creating_table_cmd, (table_info["table-name"], sql_creating_columns_and_key_cmd, table_info["engine"],))
 		mycursor.close()
 
 	def alter_one_table(self, mysql_connection, table_info):
@@ -257,9 +256,9 @@ class DataConversion:
 		# sql creating constraint 
 		sql_creating_fk_cmd = ",\n".join(self.generate_sql_foreign_keys_list(fk_constraints_list))
 		if len(sql_creating_fk_cmd) > 0:
-			sql_altering_table_cmd = f"""ALTER TABLE {table_info["table-name"]} {sql_creating_fk_cmd};"""
+			sql_altering_table_cmd = f"""ALTER TABLE %s %s;"""
 			mycursor = mysql_connection.cursor()
-			mycursor.execute(sql_altering_table_cmd)
+			mycursor.execute(sql_altering_table_cmd, (table_info["table-name"], sql_creating_fk_cmd,))
 			mycursor.close()
 
 	def generate_sql_creating_column(self, column_info):
@@ -594,10 +593,10 @@ class DataConversion:
 	def create_one_trigger(self, mysql_connection, trigger_info):
 		"""
 		"""
-		sql_create_trigger = f"""CREATE TRIGGER {trigger_info["trigger-name"]} {trigger_info["condition-timing"]} {trigger_info["event-manipulation-type"]} ON {trigger_info["table-name"]} FOR EACH {trigger_info["action-orientation"]} {trigger_info["action-statement"]}"""
+		sql_create_trigger = f"""CREATE TRIGGER %s %s %s ON %s FOR EACH %s %s"""
 		# print(sql_create_trigger)
 		mycursor = mysql_connection.cursor()
-		mycursor.execute(sql_create_trigger)
+		mycursor.execute(sql_create_trigger, (trigger_info["trigger-name"], trigger_info["condition-timing"], trigger_info["event-manipulation-type"], trigger_info["table-name"],trigger_info["action-orientation"], trigger_info["action-statement"],))
 		mycursor.close()
 
 
@@ -806,11 +805,11 @@ class DataConversion:
 
 		for table_name in self.schema.get_tables_name_list():
 			schema_validating_sql = f"""
-				SELECT column_name,ordinal_position,data_type,column_type FROM
+				SELECT column_name,ordinal_position,data_type,column_type,column_key FROM
 				(
 				    SELECT
 				        column_name,ordinal_position,
-				        data_type,column_type,COUNT(1) rowcount
+				        data_type,column_type,column_key,COUNT(1) rowcount
 				    FROM information_schema.columns
 				    WHERE
 				    (
@@ -819,7 +818,7 @@ class DataConversion:
 				    )
 				    GROUP BY
 				        column_name,ordinal_position,
-				        data_type,column_type
+				        data_type,column_type,column_key
 				    HAVING COUNT(1)=1
 				) A;
 			"""
@@ -969,11 +968,11 @@ class DataConversion:
 
 	def store_fetched_data_to_mongodb(self, table_name, fetched_data):
 		"""
-		Parallel
+		Convert data before import to MongoDB
 		"""
 		colname_coltype_dict = self.schema.get_table_column_and_data_type()[table_name]
 		rows = []
-		### Parallel start from here
+		count_blob_text = 1;
 		for row in fetched_data:
 			data = {}
 			col_fetch_seq = list(colname_coltype_dict.keys())
@@ -984,48 +983,12 @@ class DataConversion:
 				#generate SQL
 				cell_data = row[i]
 				if cell_data != None:
-					# if dtype == "GEOMETRY":
-					# 	geodata = [float(num) for num in cell_data[6:-1].split()]
-					# 	geo_x, geo_y = geodata[:2]
-					# 	if geo_x > 180 or geo_x < -180:
-					# 		geo_x = 0
-					# 	if geo_y > 90 or geo_y < -90:
-					# 		geo_y = 0
-					# 	converted_data = {
-					# 		"type": "Point",
-					# 		"coordinates": [geo_x, geo_y]
-					# 	}
-					if dtype == "GEOMETRY":
-						converted_data = cell_data
 					if dtype == "VARBINARY":
-						# print(type(cell_data), str(cell_data))
 						converted_data = bytes(cell_data)
-						# print(type(converted_data), converted_data)
-						# return
 					elif dtype == "VARCHAR":
-						# print(str[cell_data], type(cell_data))
-						# return
 						converted_data = str(cell_data)
-					elif dtype == "BIT":
-						###get col type from schema attribute 
-						# mysql_col_type = self.schema.get_col_type_from_schema_attribute(table, col)
-						# if mysql_col_type == "tinyint(1)":
-						# 	binary_num = cell_data
-						# 	converted_data = binary_num.to_bytes(len(str(binary_num)), byteorder="big")
-						# else:
-						# 	converted_data = cell_data
-						converted_data = cell_data
-					# elif dtype == "YEAR":
-						# print(cell_data, type(cell_data))
 					elif dtype == "DATE":
-						# print(cell_data, type(cell_data))
 						converted_data = datetime(cell_data.year, cell_data.month, cell_data.day)#, cell_data.hour, cell_data.minute, cell_data.second)
-					# elif dtype == "JSON":
-						# print(type(cell_data), cell_data)
-						# return
-					# elif dtype == "BLOB":
-						# print(cell_data, type(cell_data))
-						# return
 					elif target_dtype == "decimal":
 						converted_data = Decimal128(cell_data)
 					elif target_dtype == "object":
@@ -1033,15 +996,23 @@ class DataConversion:
 							converted_data = cell_data
 						else:
 							converted_data = tuple(cell_data)
+					elif target_dtype in ["blob", "text"]:
+						col_name = list(self.schema.get_table_column_and_data_type()[table_name].keys())[i]
+						file_dir_path = f"blob_and_text_file/{self.schema_conv_init_option.dbname}/{table_name}/{col_name}"
+						os.system(f"mkdir -p ./{file_dir_path}")
+						converted_data = f"{file_dir_path}/{count_blob_text}"
+						if target_dtype == "blob":
+							with open(f"./{file_dir_path}/{count_blob_text}", "wb") as out:
+								out.write(cell_data)
+						else:
+							with open(f"./{file_dir_path}/{count_blob_text}", "a") as out:
+								out.write(cell_data)
+
+						count_blob_text = count_blob_text + 1
 					else:
 						converted_data = cell_data
 					data[col_fetch_seq[i]] = converted_data 
 			rows.append(data)
-		### Parallel end here
-
-		#assign to obj
-		#store to mongodb
-		# print("Start migrating table ", table)
 		return rows
 
 	# def migrate_json_to_mongodb(self):
