@@ -1,4 +1,4 @@
-import sys, json, bson, re, time
+import sys, json, bson, re, time, os
 from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
 from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql, open_connection_mongodb, import_json_to_mongodb, extract_dict, store_json_to_mongodb, load_mongodb_collection
 from bson.decimal128 import Decimal128
@@ -15,8 +15,9 @@ class DataConversion:
 		- Converting and migrating data from MySQL to MongoDB.
 		- Validating if converting is correct, using re-converting method.
 	"""
-	def __init__(self):
+	def __init__(self, resource_id):
 		super(DataConversion, self).__init__()
+		self.resource_id = resource_id
 
 	def set_config(self, schema_conv_init_option, schema_conv_output_option, schema):
 		"""
@@ -33,7 +34,7 @@ class DataConversion:
 
 	def run(self):
 		self.__save()
-		self.validate()
+		# self.validate()
 
 	def __save(self):
 		tic = time.time()
@@ -41,6 +42,7 @@ class DataConversion:
 		toc = time.time()
 		time_taken=round((toc-tic)*1000, 1)
 		print(f"Time for migrating MySQL to MongoDB: {time_taken}")
+		self.validate()
 		self.convert_relations_to_references()
 
 	def validate(self):
@@ -98,13 +100,13 @@ class DataConversion:
 		# print(mysql_table_list)
 
 		if self.validated_dbname in mysql_table_list:
-			mycursor.execute("DROP DATABASE %s;", (self.validated_dbname,))
+			mycursor.execute(f"DROP DATABASE {self.validated_dbname}")
 		
 		# print("DROPPPPPPPPPPPPPPPPPPPPPPPPPPPP")
 		# print(self.validated_dbname)
 		# print(mysql_table_list)
 		
-		mycursor.execute("CREATE DATABASE %s;", (self.validated_dbname,))
+		mycursor.execute(f"CREATE DATABASE {self.validated_dbname}")
 		mycursor.close()
 		mydb.close()
 		print("Disconnected to MySQL Server version ", mydb.get_server_info())
@@ -238,14 +240,14 @@ class DataConversion:
 
 		sql_creating_columns_and_key_cmd = sql_creating_columns_cmd + ",\n" + sql_creating_key_cmd 
 		#sql create table
-		sql_creating_table_cmd = """CREATE TABLE %s (\n%s\n) ENGINE=%s"""# DEFAULT CHARSET={table_info["table-collation"]};"""
+		sql_creating_table_cmd = f"""CREATE TABLE {table_info["table-name"]} (\n{sql_creating_columns_and_key_cmd}\n) ENGINE={table_info["engine"]}"""# DEFAULT CHARSET={table_info["table-collation"]};"""
 		# print(sql_creating_table_cmd)
 		
 		# create table
 		# if table_info["table-name"] == "staff":
 		# print(sql_creating_table_cmd)
 		mycursor = mysql_connection.cursor()
-		mycursor.execute(sql_creating_table_cmd, (table_info["table-name"], sql_creating_columns_and_key_cmd, table_info["engine"],))
+		mycursor.execute(sql_creating_table_cmd)
 		mycursor.close()
 
 	def alter_one_table(self, mysql_connection, table_info):
@@ -256,9 +258,9 @@ class DataConversion:
 		# sql creating constraint 
 		sql_creating_fk_cmd = ",\n".join(self.generate_sql_foreign_keys_list(fk_constraints_list))
 		if len(sql_creating_fk_cmd) > 0:
-			sql_altering_table_cmd = f"""ALTER TABLE %s %s;"""
+			sql_altering_table_cmd = f"""ALTER TABLE {table_info["table-name"]} {sql_creating_fk_cmd};"""
 			mycursor = mysql_connection.cursor()
-			mycursor.execute(sql_altering_table_cmd, (table_info["table-name"], sql_creating_fk_cmd,))
+			mycursor.execute(sql_altering_table_cmd)
 			mycursor.close()
 
 	def generate_sql_creating_column(self, column_info):
@@ -593,10 +595,10 @@ class DataConversion:
 	def create_one_trigger(self, mysql_connection, trigger_info):
 		"""
 		"""
-		sql_create_trigger = f"""CREATE TRIGGER %s %s %s ON %s FOR EACH %s %s"""
+		sql_create_trigger = f"""CREATE TRIGGER {trigger_info["trigger-name"]} {trigger_info["condition-timing"]} {trigger_info["event-manipulation-type"]} ON {trigger_info["table-name"]} FOR EACH {trigger_info["action-orientation"]} {trigger_info["action-statement"]}"""
 		# print(sql_create_trigger)
 		mycursor = mysql_connection.cursor()
-		mycursor.execute(sql_create_trigger, (trigger_info["trigger-name"], trigger_info["condition-timing"], trigger_info["event-manipulation-type"], trigger_info["table-name"],trigger_info["action-orientation"], trigger_info["action-statement"],))
+		mycursor.execute(sql_create_trigger)
 		mycursor.close()
 
 
@@ -614,13 +616,12 @@ class DataConversion:
 		"""
 		datas = load_mongodb_collection(
 			self.schema_conv_output_option.host, 
-			self.schema_conv_output_option.username, 
-			self.schema_conv_output_option.password, 
 			self.schema_conv_output_option.port, 
 			self.schema_conv_output_option.dbname, 
 			collection_name
 		)
 		db_schema = self.schema.get()
+		column_dtype_dict = self.schema.get_table_column_and_data_type()[collection_name]
 		col_dict = self.schema.get_columns_dict()
 		table_coluuid_list = list(filter(lambda table_schema: table_schema["name"] == collection_name, db_schema["catalog"]["tables"]))[0]["columns"]
 		columns_name_list = [col_dict[col_uuid] for col_uuid in table_coluuid_list]
@@ -644,7 +645,15 @@ class DataConversion:
 			for key in columns_name_list:
 				if key in data.keys():
 					dtype = type(data[key])
-					if dtype is Decimal128:
+					if self.find_converted_dtype(column_dtype_dict[key]) is "text":
+						# with open(f"blob_and_text_file/{self.resource_id}/{collection_name}/{key}") as f:
+						with open(data[key]) as f:
+							cell_data = f.read()
+					elif self.find_converted_dtype(column_dtype_dict[key]) is "blob":
+						# with open(f"blob_and_text_file/{self.resource_id}/{collection_name}/{key}", "rb") as f:
+						with open(data[key], "rb") as f:
+							cell_data = f.read()
+					elif dtype is Decimal128:
 						cell_data = data[key].to_decimal()
 					elif dtype is list:
 						# return
@@ -663,92 +672,7 @@ class DataConversion:
 		print("Insert done!")		
 
 
-	# def specify_sequence_of_migrating_tables(self):
-	# 	"""
-	# 	Specify sequence of migrating tables from MySQL. The sequence must guarantee all tables and data within them will be migrated effectively and efficiently.
-	# 	We will make a tree to determine which order each table should have.
-	# 	Result will be a dictionary which have tables' names as key and orders in sequence as values.
-	# 	The lower mark table have, the higher order get, and data of it will be migrate previously.
-	# 	"""
-	# 	db_schema = self.schema.get()
-	# 	tables_schema = db_schema["catalog"]["tables"]
-	# 	tables_relations = self.schema.get_tables_relations()
-	# 	# print(tables_relations)
-	# 	# return
-	# 	tables_name_list = self.schema.get_tables_name_list()
-
-	# 	refering_tables_set = set(map(lambda ele: ele["foreign_key_table"], tables_relations.values()))
-	# 	root_nodes = set(tables_name_list) - refering_tables_set
-
-	# 	node_seq = dict.fromkeys(tables_name_list, -1)
-	# 	node_seq.update(dict.fromkeys(root_nodes, 0))
-
-	# 	# Eliminate self reference relation
-	# 	tables_relations_list = list(filter(lambda rel: rel["primary_key_table"] != rel["foreign_key_table"], list(tables_relations.values())))
-	# 	# print(tables_relations_list)
-	# 	# return
-	# 	# print(node_seq)
-	# 	current_mark = 0
-	# 	lowest_nodes_set = root_nodes 
-	# 	current_rels = list(filter(lambda rel: rel["primary_key_table"] in lowest_nodes_set, tables_relations_list))
-	# 	print(lowest_nodes_set)
-	# 	while len(current_rels) > 0:
-	# 		current_mark = current_mark + 1
-	# 		lowest_nodes_set = set(map(lambda rel: rel["foreign_key_table"], current_rels))
-	# 		print(lowest_nodes_set)
-	# 		if(current_mark) == 4:
-	# 			return
-	# 		for node in lowest_nodes_set:
-	# 			node_seq[node] = current_mark
-	# 		current_rels = list(filter(lambda rel: rel["primary_key_table"] in lowest_nodes_set, tables_relations_list))
-	# 		# print(len(current_rels))
-	# 	return
-
-
-		# def update_seq_list(seq_list, pk_table, fk_table):
-		# 	if pk_table in seq_list:
-		# 		pk_idx = seq_list.index(pk_table)
-		# 		if fk_table in seq_list:
-		# 			fk_idx = seq_list.index(fk_table)
-		# 			if pk_idx > fk_idx:
-		# 				seq_list = swap_seq_list(seq_list, fk_idx, pk_idx)
-		# 				seq_list = seq_list[:fk_idx] + seq_list[fk_idx+1:pk_idx+1] + [fk_table] + seq_list[pk_idx+1:] 
-		# 		else: 
-		# 			seq_list = seq_list[:pk_idx+1] + [fk_table] + seq_list[pk_idx+1:]
-		# 	else:
-		# 		if fk_table in seq_list:
-		# 			fk_idx = seq_list.index(fk_table)	
-		# 			seq_list = seq_list[:fk_idx] + [pk_table] + seq_list[fk_idx+1:]
-		# 		else:
-		# 			seq_list = seq_list + [pk_table, fk_table]
-		# 	return seq_list
-		# seq_list = list(root_nodes)
-		# for rel in tables_relations_list:
-		# 	seq_list = update_seq_list(seq_list, rel["primary_key_table"], rel["foreign_key_table"])
-		# print(seq_list)
-		# return
-		# current_mark = 0
-		# while(current_mark <= max(node_seq.values())):
-		# 	source_nodes = set(filter(lambda key: node_seq[str(key)] == current_mark, node_seq.keys()))
-		# 	# print(source_nodes)
-		# 	# return
-		# 	for source_node in source_nodes:
-		# 		for direction in tables_relations_list:
-		# 			if(direction["primary_key_table"] == source_node):
-		# 				if(node_seq[direction["foreign_key_table"]] < current_mark + 1):
-		# 					node_seq[direction["foreign_key_table"]] = current_mark + 1
-		# 				direction["primary_key_table"] = None #TODO: Find a more effective way to eliminate retrieved nodes
-		# 	current_mark = current_mark + 1
-		# print(node_seq)
-
-		# table_seq = {} 
-		# for i in range(current_mark):
-		# 	table_seq[str(i)] = []
-		# 	for key in list(node_seq):
-		# 		if node_seq[key] == i:
-		# 			table_seq[str(i)] = table_seq[str(i)] + [key]
-		# return table_seq 
-
+	
 	def write_validation_log(self):
 		"""
 		Write validation log to MongoDB
@@ -761,38 +685,13 @@ class DataConversion:
 		)
 		"""
 		print("Start writing log!")
-		# ori_conn = open_connection_mysql(
-		# 	self.schema_conv_init_option.host, 
-		# 	self.schema_conv_init_option.username, 
-		# 	self.schema_conv_init_option.password,
-		# 	self.schema_conv_init_option.dbname
-		# 	)
-		# ori_cur = ori_conn.cursor()
-
-		# val_conn = open_connection_mysql(
-		# 	self.schema_conv_init_option.host, 
-		# 	self.schema_conv_init_option.username, 
-		# 	self.schema_conv_init_option.password,
-		# 	self.validated_dbname
-		# 	)
-		# val_cur = val_conn.cursor()
+		
 
 		mongodb_conn = open_connection_mongodb(
-			self.schema_conv_output_option.host,
-			self.schema_conv_output_option.username,
-			self.schema_conv_output_option.password,
-			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname
-			)
+			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.port,
+			self.schema_conv_output_option.dbname)
 
-		# for table in self.schema.get_tables_name_list():
-		# 	mongo_count = mongodb_conn[table].count() 
-		# 	sql = f"select count(*) from {table};"
-		# 	ori_cur.execute(sql)
-		# 	val_cur.execute(sql)
-		# 	ori_data = ori_cur.fetchall()	
-		# 	val_data = val_cur.fetchall()	
-		# 	print(ori_data[0][0], mongo_count, val_data[0][0])
 
 		mysql_conn = open_connection_mysql(
 			self.schema_conv_init_option.host, 
@@ -805,11 +704,11 @@ class DataConversion:
 
 		for table_name in self.schema.get_tables_name_list():
 			schema_validating_sql = f"""
-				SELECT column_name,ordinal_position,data_type,column_type,column_key FROM
+				SELECT column_name,ordinal_position,data_type,column_type FROM
 				(
 				    SELECT
 				        column_name,ordinal_position,
-				        data_type,column_type,column_key,COUNT(1) rowcount
+				        data_type,column_type,COUNT(1) rowcount
 				    FROM information_schema.columns
 				    WHERE
 				    (
@@ -818,7 +717,7 @@ class DataConversion:
 				    )
 				    GROUP BY
 				        column_name,ordinal_position,
-				        data_type,column_type,column_key
+				        data_type,column_type
 				    HAVING COUNT(1)=1
 				) A;
 			"""
@@ -847,7 +746,8 @@ class DataConversion:
 
 			mysql_cur.execute(data_validating_sql)
 			data_validating_data = mysql_cur.fetchall()
-			log_data["data"] = data_validating_data
+			cast_data = list(map(lambda ele: str(ele), data_validating_data))
+			log_data["data"] = cast_data
 
 			store_json_to_mongodb(mongodb_conn, "validating_log", log_data)
 
@@ -870,6 +770,7 @@ class DataConversion:
 			"timestamp": "timestamp",
 			"binary": "binary",
 			"blob": "blob",
+			"text": "text",
 			"string": "string",
 			"object": "object",
 			"single-geometry": "single-geometry",
@@ -885,7 +786,8 @@ class DataConversion:
 		dtype_dict[mongodb_dtype["timestamp"]] = ["DATETIME", "TIMESTAMP", "TIME"]
 		dtype_dict[mongodb_dtype["binary"]] = ["BIT", "BINARY", "VARBINARY"]
 		dtype_dict[mongodb_dtype["blob"]] = ["TINYBLOB", "BLOB", "MEDIUMBLOB", "LONGBLOB"]
-		dtype_dict[mongodb_dtype["string"]] = ["CHARACTER", "CHARSET", "ASCII", "UNICODE", "CHAR", "VARCHAR", "TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT"]
+		dtype_dict[mongodb_dtype["text"]] = ["TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT"]
+		dtype_dict[mongodb_dtype["string"]] = ["CHARACTER", "CHARSET", "ASCII", "UNICODE", "CHAR", "VARCHAR"]
 		dtype_dict[mongodb_dtype["object"]] = ["ENUM", "SET", "JSON"]
 		dtype_dict[mongodb_dtype["single-geometry"]] = ["GEOMETRY", "POINT", "LINESTRING", "POLYGON"]
 		dtype_dict[mongodb_dtype["multiple-geometry"]] = ["MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON", "GEOMETRYCOLLECTION"]
@@ -913,12 +815,9 @@ class DataConversion:
 		fetched_data_list = self.get_fetched_data_list(table_name)
 		convert_data_list = self.store_fetched_data_to_mongodb(table_name, fetched_data_list)
 		mongodb_connection = open_connection_mongodb(
-			self.schema_conv_output_option.host,
-			self.schema_conv_output_option.username,
-			self.schema_conv_output_option.password,
+			self.schema_conv_output_option.host, 
 			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname
-			)
+			self.schema_conv_output_option.dbname)
 		store_json_to_mongodb(mongodb_connection, table_name, convert_data_list)
 		
 	def get_fetched_data_list(self, table_name):
@@ -998,7 +897,7 @@ class DataConversion:
 							converted_data = tuple(cell_data)
 					elif target_dtype in ["blob", "text"]:
 						col_name = list(self.schema.get_table_column_and_data_type()[table_name].keys())[i]
-						file_dir_path = f"blob_and_text_file/{self.schema_conv_init_option.dbname}/{table_name}/{col_name}"
+						file_dir_path = f"blob_and_text_file/{self.resource_id}/{table_name}/{col_name}"
 						os.system(f"mkdir -p ./{file_dir_path}")
 						converted_data = f"{file_dir_path}/{count_blob_text}"
 						if target_dtype == "blob":
@@ -1014,18 +913,6 @@ class DataConversion:
 					data[col_fetch_seq[i]] = converted_data 
 			rows.append(data)
 		return rows
-
-	# def migrate_json_to_mongodb(self):
-	# 	"""
-	# 	Migrate data from json file to MongoDB.
-	# 	"""
-	# 	db_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname)
-	# 	tables_and_views_name_list = self.schema.get_tables_and_views_list()
-	# 	for table_name in tables_and_views_name_list:
-	# 		collection_name = table_name
-	# 		json_filename = collection_name + ".json"
-	# 		import_json_to_mongodb(db_connection, collection_name, self.schema_conv_output_option.dbname, json_filename, True)
-	# 	print("Migrate data from JSON to MongoDB successfully!")
 
 	def convert_relations_to_references(self):
 		"""
@@ -1061,9 +948,7 @@ class DataConversion:
 		Convert one relation of MySQL table to database reference of MongoDB
 		"""
 		db_connection = open_connection_mongodb(
-			self.schema_conv_output_option.host,
-			self.schema_conv_output_option.username,
-			self.schema_conv_output_option.password,
+			self.schema_conv_output_option.host, 
 			self.schema_conv_output_option.port, 
 			self.schema_conv_output_option.dbname
 			)

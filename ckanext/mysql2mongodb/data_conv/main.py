@@ -1,7 +1,6 @@
 from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
 from ckanext.mysql2mongodb.data_conv.database_connection import ConvInitOption, ConvOutputOption
 from ckanext.mysql2mongodb.data_conv.data_conversion import DataConversion
-from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql
 import urllib, json, re, os, requests
 from pprint import pprint
 
@@ -12,10 +11,10 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 		if sql_file_name.split(".")[1] != "sql":
 			print("Invalided MySQL backup file extension!")
 			raise Exception()
-		os.system("whoami")
-		os.chdir("/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv")
-		# os.system("ll")
+
+		os.chdir("/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv")
 		os.system(f"mkdir -p ./downloads/{resource_id}")
+		os.system(f"mkdir -p ./blob_and_text_file/{resource_id}")
 		os.system(f"curl -o ./downloads/{resource_id}/{sql_file_name} {sql_file_url}")
 
 		db_conf = read_database_config()
@@ -28,14 +27,10 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 		mysql_password = db_conf["mysql_password"]
 		mysql_port = db_conf["mysql_port"]
 		mysql_dbname = schema_name
-
-		mysql_conn = open_connection_mysql(mysql_host, mysql_username, mysql_password)
-		mysql_cur = mysql_conn.cursor()
-		mysql_cur.execute("CREATE DATABASE IF NOT EXISTS %s;", (mysql_dbname,))
-		mysql_cur.close()
-		mysql_conn.close()
 		
-		os.system(f"mysql -h {mysql_host} -u {mysql_username} --password={mysql_password} {schema_name} < ./downloads/{resource_id}/{sql_file_name}")
+		os.system(f"mysql -u {mysql_username} -p {mysql_password} {schema_name} < ./downloads/{resource_id}/{sql_file_name}")
+		
+
 		
 		schema_conv_init_option = ConvInitOption(host = mysql_host, username = mysql_username, password = mysql_password, port = mysql_port, dbname = mysql_dbname)
 
@@ -50,14 +45,18 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 		schema_conversion.set_config(schema_conv_init_option, schema_conv_output_option)
 		schema_conversion.run()
 
-		mysql2mongodb = DataConversion()
+		mysql2mongodb = DataConversion(resource_id)
 		mysql2mongodb.set_config(schema_conv_init_option, schema_conv_output_option, schema_conversion)
 		mysql2mongodb.run()
 
-		os.system(f"mkdir -p mongodump_files")
-		os.system(f"mongodump --username {mongodb_username} --password {mongodb_password} --host {mongodb_host} --port {mongodb_port} --authenticationDatabase admin --db {mongodb_dbname} -o mongodump_files/")
-		os.chdir("./mongodump_files")
-		os.system(f"zip -r {schema_name}.zip {schema_name}/*")
+		os.system(f"mkdir -p mongodump_files/{resource_id}")
+		os.system(f"mongodump --username {mongodb_username} --password {mongodb_password} --authenticationDatabase admin --db {mongodb_dbname} -o mongodump_files/{resource_id}/")
+		# os.chdir(f"./mongodump_files")
+		os.system(f"mkdir -p uploads/{resource_id}")
+		os.system(f"cp -r mongodump_files/{resource_id}/{schema_name} uploads/{resource_id}/{schema_name}")
+		os.system(f"cp -r blob_and_text_file/{resource_id} uploads/{resource_id}/blob_and_text_file")
+		os.chdir(f"./uploads/{resource_id}")
+		os.system(f"zip -r {schema_name}.zip *")
 
 		response = requests.post('http://localhost:5000/api/action/resource_create',
 	          data={"package_id":package_conf["package_id"], "name":f"{schema_name}-{resource_id}.zip"},

@@ -38,6 +38,7 @@ class SchemaConversion:
 		self.create_mongo_schema_validators()
 		self.create_mongo_indexes()
 		self.drop_view()
+		print("Convert schema successfully!")
 		return True
 
 	def get(self):
@@ -49,12 +50,7 @@ class SchemaConversion:
 		"""
 		Save MySQL schema which was generate by SchemaCrawler to MongoDB database
 		"""
-		db_connection = open_connection_mongodb(
-			self.schema_conv_output_option.host, 
-			self.schema_conv_output_option.username, 
-			self.schema_conv_output_option.password, 
-			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname) 
+		db_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname) 
 		# print("Ready 		
 		import_json_to_mongodb(db_connection, collection_name="schema", dbname=self.schema_conv_output_option.dbname, json_filename=self.schema_filename)
 		print(f"Save schema from {self.schema_conv_output_option.dbname} database to MongoDB successfully!")
@@ -67,13 +63,7 @@ class SchemaConversion:
 		*Need to be edited for loading from MongoDB instead.
 		"""
 		if not hasattr(self, "db_schema"):
-			db_schema = load_mongodb_collection(
-				self.schema_conv_output_option.host,
-				self.schema_conv_output_option.username,
-				self.schema_conv_output_option.password, 
-				self.schema_conv_output_option.port, 
-				self.schema_conv_output_option.dbname, 
-				"schema")
+			db_schema = load_mongodb_collection(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname, "schema")
 			self.db_schema = db_schema[0]
 			# Most used variable
 			self.all_table_columns = self.db_schema["all-table-columns"]
@@ -86,7 +76,7 @@ class SchemaConversion:
 		"""
 		command_create_intermediate_dir = f"mkdir -p ./intermediate_data/{self.schema_conv_init_option.dbname}"
 		os.system(command_create_intermediate_dir)
-		command = f"_schemacrawler/schemacrawler.sh \
+		command = f"schemacrawler.sh \
 		--server=mysql \
 		--host={self.schema_conv_init_option.host} \
 		--port={self.schema_conv_init_option.port} \
@@ -98,7 +88,7 @@ class SchemaConversion:
 		--command=serialize\
 		--output-file=./intermediate_data/{self.schema_conv_init_option.dbname}/{self.schema_filename}"
 		os.system(command)
-		print(f"Generate MySQL database {self.schema_conv_init_option.dbname} schema successfully!")
+		print(f"Generate MySQL database {self.schema_conv_init_option.dbname} successfully!")
 		return True
 
 
@@ -107,18 +97,11 @@ class SchemaConversion:
 		Drop a MongoDB database.
 		For development only.
 		"""
-		drop_mongodb_database(
-			self.schema_conv_output_option.host, 
-			self.schema_conv_output_option.username, 
-			self.schema_conv_output_option.password, 
-			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname)
+		drop_mongodb_database(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname)
 
 	def drop_view(self):
 		mongodb_connection = open_connection_mongodb(
-			self.schema_conv_output_option.host,
-			self.schema_conv_output_option.username,
-			self.schema_conv_output_option.password,
+			self.schema_conv_output_option.host, 
 			self.schema_conv_output_option.port, 
 			self.schema_conv_output_option.dbname
 			)
@@ -268,13 +251,7 @@ class SchemaConversion:
 					sub_dict = {}
 					sub_dict[col_name] = data
 					enum_col_dict[table_name] = sub_dict
-		db_connection = open_connection_mongodb(
-			self.schema_conv_output_option.host,
-			self.schema_conv_output_option.username,
-			self.schema_conv_output_option.password,
-			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname
-			)
+		db_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname) 
 		for table in self.get_tables_and_views_list():
 			db_connection.create_collection(table)
 		for table in table_cols_uuid:
@@ -299,7 +276,9 @@ class SchemaConversion:
 				vexpr = {"$jsonSchema": json_schema}
 				cmd = OrderedDict([('collMod', table), ('validator', vexpr)])
 				db_connection.command(cmd)
-		print("Create validator done!")
+
+		print("Create schema validator successfully!")
+		return True
 		
 
 	def data_type_schema_mapping(self, mysql_type):
@@ -316,9 +295,14 @@ class SchemaConversion:
 		# dtype_dict["bool"] = []
 		dtype_dict["date"] = ["DATE", "DATETIME", "TIMESTAMP", "TIME"]
 		# dtype_dict["timestamp"] = []
-		dtype_dict["binData"] = ["BINARY", "VARBINARY", "TINYBLOB", "BLOB", "MEDIUMBLOB", "LONGBLOB"]
+		dtype_dict["binData"] = ["BINARY", "VARBINARY"]
 		# dtype_dict["blob"] = []
-		dtype_dict["string"] = ["JSON", "CHARACTER", "CHARSET", "ASCII", "UNICODE", "CHAR", "VARCHAR", "TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT", "GEOMETRY", "POINT", "LINESTRING", "POLYGON", "MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON", "GEOMETRYCOLLECTION"]
+		dtype_dict["string"] = [
+			"JSON", "CHARACTER", "CHARSET", "ASCII", "UNICODE", "CHAR", "VARCHAR", 
+			"TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT", 
+			"TINYBLOB", "BLOB", "MEDIUMBLOB", "LONGBLOB",
+			"GEOMETRY", "POINT", "LINESTRING", "POLYGON", 
+			"MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON", "GEOMETRYCOLLECTION"]
 		dtype_dict["object"] = ["ENUM"]
 		dtype_dict["array"] = ["SET"]
 		# dtype_dict["single-geometry"] = []
@@ -361,13 +345,7 @@ class SchemaConversion:
 					idx_table_name_type_dict[table_name] = {}
 				idx_table_name_type_dict[table_name][idx_name] = idx_type
 		col_dict = self.get_columns_dict()
-		mongodb_connection = open_connection_mongodb(
-			self.schema_conv_output_option.host,
-			self.schema_conv_output_option.username,
-			self.schema_conv_output_option.password,
-			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname
-			) 
+		mongodb_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname) 
 		for table in self.tables_schema:
 			collection = mongodb_connection[table["name"]]
 			index_list = table["indexes"]
@@ -411,7 +389,6 @@ class SchemaConversion:
 						# 		collection.create_index([(col_dict[idx_uuid], TEXT) for idx_uuid in index_cols], unique = index_unique)
 						# else:
 							# print(f"MySQL index type {index_type} has not been handled!")
-		
 
 
 	def get_coluuid(self, table_name, col_name):
@@ -576,19 +553,21 @@ class SchemaConversion:
 		mysql_cursor.execute("SHOW TRIGGERS;")
 		# triggers_list = [fetched_data for fetched_data in mysql_cursor]
 		triggers_list = mysql_cursor.fetchall()
+		# print(triggers_list)
 		mysql_cursor.close()
 		mysql_connection.close()
 		triggers_dict = {}
 		for trigger in triggers_list:
-			triggers_dict[trigger[2].decode("utf-8")] = []
+			# triggers_dict[trigger[2].decode("utf-8")] = []
+			triggers_dict[trigger[2] if type(trigger[2]) is str else trigger[2].decode("utf-8")] = []
 		for trigger in triggers_list:
 			trigger_info = {
 				"trigger-name": trigger[0],
-				"envent": trigger[1].decode("utf-8"),
-				"statement": trigger[3].decode("utf-8"),
-				"timing": trigger[4].decode("utf-8")
+				"envent": trigger[1] if type(trigger[1]) is str else trigger[1].decode("utf-8"),
+				"statement": trigger[3] if type(trigger[3]) is str else trigger[3].decode("utf-8"),
+				"timing": trigger[4] if type(trigger[4]) is str else trigger[4].decode("utf-8")
 			}
-			triggers_dict[trigger[2].decode("utf-8")].append(trigger_info)
+			triggers_dict[trigger[2] if type(trigger[2]) is str else trigger[2].decode("utf-8")].append(trigger_info)
 		return triggers_dict
 
 	def get_procedures_list(self):
@@ -639,3 +618,4 @@ class SchemaConversion:
 				})
 
 		return functions_list
+		
