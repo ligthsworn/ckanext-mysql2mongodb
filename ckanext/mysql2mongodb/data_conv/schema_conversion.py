@@ -67,7 +67,13 @@ class SchemaConversion:
 		*Need to be edited for loading from MongoDB instead.
 		"""
 		if not hasattr(self, "db_schema"):
-			db_schema = load_mongodb_collection(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname, "schema")
+			db_schema = load_mongodb_collection(
+				self.schema_conv_output_option.host, 
+				self.schema_conv_output_option.username, 
+				self.schema_conv_output_option.password, 
+				self.schema_conv_output_option.port, 
+				self.schema_conv_output_option.dbname, 
+				"schema")
 			self.db_schema = db_schema[0]
 			# Most used variable
 			self.all_table_columns = self.db_schema["all-table-columns"]
@@ -80,7 +86,7 @@ class SchemaConversion:
 		"""
 		command_create_intermediate_dir = f"mkdir -p ./intermediate_data/{self.schema_conv_init_option.dbname}"
 		os.system(command_create_intermediate_dir)
-		command = f"schemacrawler.sh \
+		command = f"_schemacrawler/schemacrawler.sh \
 		--server=mysql \
 		--host={self.schema_conv_init_option.host} \
 		--port={self.schema_conv_init_option.port} \
@@ -101,7 +107,12 @@ class SchemaConversion:
 		Drop a MongoDB database.
 		For development only.
 		"""
-		drop_mongodb_database(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname)
+		drop_mongodb_database(
+			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.username, 
+			self.schema_conv_output_option.password, 
+			self.schema_conv_output_option.port,
+			self.schema_conv_output_option.dbname)
 
 	def drop_view(self):
 		mongodb_connection = open_connection_mongodb(

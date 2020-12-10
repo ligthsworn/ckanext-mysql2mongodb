@@ -16,6 +16,7 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 		os.chdir("/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv")
 		os.system(f"mkdir -p ./downloads/{resource_id}")
 		os.system(f"mkdir -p ./blob_and_text_file/{resource_id}")
+		os.system(f"mkdir -p ./conversion_log/{resource_id}")
 		os.system(f"curl -o ./downloads/{resource_id}/{sql_file_name} {sql_file_url}")
 
 		db_conf = read_database_config()
@@ -59,6 +60,7 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 		os.system(f"mkdir -p uploads/{resource_id}")
 		os.system(f"cp -r mongodump_files/{resource_id}/{schema_name} uploads/{resource_id}/{schema_name}")
 		os.system(f"cp -r blob_and_text_file/{resource_id} uploads/{resource_id}/blob_and_text_file")
+		os.system(f"cp -r conversion_log/{resource_id} uploads/{resource_id}/conversion_log")
 		os.chdir(f"./uploads/{resource_id}")
 		os.system(f"zip -r {schema_name}.zip *")
 

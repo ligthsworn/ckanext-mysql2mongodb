@@ -34,7 +34,7 @@ class DataConversion:
 
 	def run(self):
 		self.__save()
-		# self.validate()
+		self.validate()
 
 	def __save(self):
 		tic = time.time()
@@ -42,7 +42,6 @@ class DataConversion:
 		toc = time.time()
 		time_taken=round((toc-tic)*1000, 1)
 		print(f"Time for migrating MySQL to MongoDB: {time_taken}")
-		self.validate()
 		self.convert_relations_to_references()
 
 	def validate(self):
@@ -616,6 +615,8 @@ class DataConversion:
 		"""
 		datas = load_mongodb_collection(
 			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.username, 
+			self.schema_conv_output_option.password, 
 			self.schema_conv_output_option.port, 
 			self.schema_conv_output_option.dbname, 
 			collection_name
@@ -645,11 +646,11 @@ class DataConversion:
 			for key in columns_name_list:
 				if key in data.keys():
 					dtype = type(data[key])
-					if self.find_converted_dtype(column_dtype_dict[key]) is "text":
+					if self.find_converted_dtype(column_dtype_dict[key]) == "text":
 						# with open(f"blob_and_text_file/{self.resource_id}/{collection_name}/{key}") as f:
 						with open(data[key]) as f:
 							cell_data = f.read()
-					elif self.find_converted_dtype(column_dtype_dict[key]) is "blob":
+					elif self.find_converted_dtype(column_dtype_dict[key]) == "blob":
 						# with open(f"blob_and_text_file/{self.resource_id}/{collection_name}/{key}", "rb") as f:
 						with open(data[key], "rb") as f:
 							cell_data = f.read()
@@ -706,11 +707,11 @@ class DataConversion:
 
 		for table_name in self.schema.get_tables_name_list():
 			schema_validating_sql = f"""
-				SELECT column_name,ordinal_position,data_type,column_type FROM
+				SELECT column_name,ordinal_position,data_type,column_type,column_key FROM
 				(
 				    SELECT
 				        column_name,ordinal_position,
-				        data_type,column_type,COUNT(1) rowcount
+				        data_type,column_type,column_key,COUNT(1) rowcount
 				    FROM information_schema.columns
 				    WHERE
 				    (
@@ -719,7 +720,7 @@ class DataConversion:
 				    )
 				    GROUP BY
 				        column_name,ordinal_position,
-				        data_type,column_type
+				        data_type,column_type,column_key
 				    HAVING COUNT(1)=1
 				) A;
 			"""
@@ -751,7 +752,9 @@ class DataConversion:
 			cast_data = list(map(lambda ele: str(ele), data_validating_data))
 			log_data["data"] = cast_data
 
-			store_json_to_mongodb(mongodb_conn, "validating_log", log_data)
+			with open(f"./conversion_log/{self.resource_id}/log.json", 'w') as f:
+				json.dump(log_data, f)
+			# store_json_to_mongodb(mongodb_conn, "validating_log", log_data)
 
 		mysql_cur.close()
 		mysql_conn.close()
