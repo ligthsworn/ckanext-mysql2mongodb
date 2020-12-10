@@ -62,9 +62,10 @@ def store_json_to_mongodb(mongodb_connection, collection_name, json_data):
 	try:		   
 		# Created or switched to collection  
 		Collection = mongodb_connection[collection_name]
-		if isinstance(json_data, list): 
-		    Collection.insert_many(json_data)   
-		    # Collection.insert_many(json_data, ordered=False)   
+		if isinstance(json_data, list):
+			if len(json_data) > 0: 
+			    Collection.insert_many(json_data)   
+			    # Collection.insert_many(json_data, ordered=False)   
 		else: 
 		    Collection.insert_one(json_data)
 		print(f"Write JSON data to MongoDB collection {collection_name} successfully!") 
@@ -147,16 +148,3 @@ def open_connection_mysql(host, username, password, dbname = None):
 		print(f"Error while connecting to MySQL database {dbname}! Re-check connection or name of database.")
 		print(e)
 		raise e
-
-	# def write_json_to_file(self, json_data, filename):
-	# 	"""Write json data to file"""
-	# 	with open(f"./intermediate_data/{self.schema_conv_init_option.dbname}/{filename}", 'w') as outfile:
-	# 		json.dump(json_data, outfile, default=str)
-
-# if __name__ == '__main__':
-# 	mongodb_host = 'localhost'
-# 	mongodb_username = ''
-# 	mongodb_password = ''
-# 	mongodb_port = '27017'
-# 	mongodb_dbname = 'sakila'
-# 	load_mongodb_collection(mongodb_host, mongodb_port, mongodb_dbname, "original_schema")

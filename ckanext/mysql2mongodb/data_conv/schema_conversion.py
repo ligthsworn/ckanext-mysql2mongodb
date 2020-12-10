@@ -50,8 +50,12 @@ class SchemaConversion:
 		"""
 		Save MySQL schema which was generate by SchemaCrawler to MongoDB database
 		"""
-		db_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname) 
-		# print("Ready 		
+		db_connection = open_connection_mongodb(
+			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.username, 
+			self.schema_conv_output_option.password, 
+			self.schema_conv_output_option.port,
+			self.schema_conv_output_option.dbname)	
 		import_json_to_mongodb(db_connection, collection_name="schema", dbname=self.schema_conv_output_option.dbname, json_filename=self.schema_filename)
 		print(f"Save schema from {self.schema_conv_output_option.dbname} database to MongoDB successfully!")
 		return True
@@ -102,9 +106,10 @@ class SchemaConversion:
 	def drop_view(self):
 		mongodb_connection = open_connection_mongodb(
 			self.schema_conv_output_option.host, 
-			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname
-			)
+			self.schema_conv_output_option.username, 
+			self.schema_conv_output_option.password, 
+			self.schema_conv_output_option.port,
+			self.schema_conv_output_option.dbname)
 		view_set = set(self.get_tables_and_views_list()) - set(self.get_tables_name_list())
 		for view in list(view_set):
 			mycol = mongodb_connection[view]
@@ -251,7 +256,12 @@ class SchemaConversion:
 					sub_dict = {}
 					sub_dict[col_name] = data
 					enum_col_dict[table_name] = sub_dict
-		db_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname) 
+		db_connection = open_connection_mongodb(
+			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.username, 
+			self.schema_conv_output_option.password, 
+			self.schema_conv_output_option.port,
+			self.schema_conv_output_option.dbname)
 		for table in self.get_tables_and_views_list():
 			db_connection.create_collection(table)
 		for table in table_cols_uuid:
@@ -288,8 +298,8 @@ class SchemaConversion:
 		Output: MongoDB data type.
 		"""
 		dtype_dict = {}
-		dtype_dict["int"] = ["BIT", "TINYINT", "SMALLINT", "MEDIUMINT", "INT", "INTEGER", "YEAR", "BOOL", "BOOLEAN"] 
-		dtype_dict["long"] = ["BIGINT"]
+		dtype_dict["int"] = ["BIT", "TINYINT", "SMALLINT", "MEDIUMINT", "YEAR", "BOOL", "BOOLEAN"] 
+		dtype_dict["long"] = ["INT", "INTEGER", "BIGINT"]
 		dtype_dict["decimal"] = ["DECIMAL", "DEC", "FIXED"]
 		dtype_dict["double"] = ["FLOAT", "DOUBLE", "REAL"]
 		# dtype_dict["bool"] = []
@@ -345,7 +355,12 @@ class SchemaConversion:
 					idx_table_name_type_dict[table_name] = {}
 				idx_table_name_type_dict[table_name][idx_name] = idx_type
 		col_dict = self.get_columns_dict()
-		mongodb_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname) 
+		open_connection_mongodb(
+			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.username, 
+			self.schema_conv_output_option.password, 
+			self.schema_conv_output_option.port, 
+			self.schema_conv_output_option.dbname) 
 		for table in self.tables_schema:
 			collection = mongodb_connection[table["name"]]
 			index_list = table["indexes"]
@@ -524,7 +539,12 @@ class SchemaConversion:
 		# print(converted_schema["procedures"])
 		# print(converted_schema["functions"])
 		
-		mongodb_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname) 
+		mongodb_connection = open_connection_mongodb(
+			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.username, 
+			self.schema_conv_output_option.password, 
+			self.schema_conv_output_option.port,
+			self.schema_conv_output_option.dbname)
 		store_json_to_mongodb(mongodb_connection, "schema_view", converted_schema)
 		print(f"Save schema view from {self.schema_conv_output_option.dbname} database to MongoDB successfully!")
 		return True

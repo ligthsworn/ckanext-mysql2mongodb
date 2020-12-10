@@ -689,6 +689,8 @@ class DataConversion:
 
 		mongodb_conn = open_connection_mongodb(
 			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.username, 
+			self.schema_conv_output_option.password, 
 			self.schema_conv_output_option.port,
 			self.schema_conv_output_option.dbname)
 
@@ -816,7 +818,9 @@ class DataConversion:
 		convert_data_list = self.store_fetched_data_to_mongodb(table_name, fetched_data_list)
 		mongodb_connection = open_connection_mongodb(
 			self.schema_conv_output_option.host, 
-			self.schema_conv_output_option.port, 
+			self.schema_conv_output_option.username, 
+			self.schema_conv_output_option.password, 
+			self.schema_conv_output_option.port,
 			self.schema_conv_output_option.dbname)
 		store_json_to_mongodb(mongodb_connection, table_name, convert_data_list)
 		
@@ -919,7 +923,6 @@ class DataConversion:
 		Convert relations of MySQL table to database references of MongoDB
 		"""
 		tables_name_list = self.schema.get_tables_name_list()
-		# db_connection = open_connection_mongodb(mongodb_connection_info)
 		tables_relations = self.schema.get_tables_relations()
 		# converting_tables_order = specify_sequence_of_migrating_tables(schema_file)
 		edited_table_relations_dict = {}
@@ -949,9 +952,10 @@ class DataConversion:
 		"""
 		db_connection = open_connection_mongodb(
 			self.schema_conv_output_option.host, 
-			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname
-			)
+			self.schema_conv_output_option.username, 
+			self.schema_conv_output_option.password, 
+			self.schema_conv_output_option.port,
+			self.schema_conv_output_option.dbname)
 		original_collection_connection = db_connection[original_collection_name]
 		original_documents = original_collection_connection.find()
 		new_referenced_key_dict = {}
