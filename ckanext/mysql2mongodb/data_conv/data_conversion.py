@@ -1,6 +1,8 @@
 import sys, json, bson, re, time, os
-from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
-from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql, open_connection_mongodb, import_json_to_mongodb, extract_dict, store_json_to_mongodb, load_mongodb_collection
+# from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
+# from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql, open_connection_mongodb, import_json_to_mongodb, extract_dict, store_json_to_mongodb, load_mongodb_collection
+from schema_conversion import SchemaConversion
+from utilities import open_connection_mysql, open_connection_mongodb, import_json_to_mongodb, extract_dict, store_json_to_mongodb, load_mongodb_collection
 from bson.decimal128 import Decimal128
 from decimal import Decimal
 from bson import BSON
@@ -34,15 +36,22 @@ class DataConversion:
 
 	def run(self):
 		self.__save()
+		tic = time.time()
 		self.validate()
+		toc = time.time()
+		time_taken=round(toc-tic, 0)
+		print(f"Time for validating MySQL to MongoDB: {time_taken}")
 
 	def __save(self):
 		tic = time.time()
 		self.migrate_mysql_to_mongodb()
 		toc = time.time()
-		time_taken=round((toc-tic)*1000, 1)
+		time_taken=round(toc-tic, 0)
 		print(f"Time for migrating MySQL to MongoDB: {time_taken}")
 		self.convert_relations_to_references()
+		tac = time.time()
+		time_taken=round(tac-toc, 0)
+		print(f"Time for converting relations MySQL to MongoDB references: {time_taken}")
 
 	def validate(self):
 		"""
@@ -57,28 +66,20 @@ class DataConversion:
 		5 Evaluate 
 		"""
 
-		mysql_connection = self.create_validated_database()
+		self.create_validated_database()
 
-		self.create_validated_tables(mysql_connection)
+		self.create_validated_tables()
 		
 
 		# return
 
-		self.migrate_mongodb_to_mysql(mysql_connection)
-		# self.migrate_mongodb_to_mysql(mysql_connection)
-		# self.migrate_mongodb_to_mysql(mysql_connection)
+		self.migrate_mongodb_to_mysql()
 
-		db_schema = self.schema.get()
 		table_info_list = self.get_table_info_list()
 		for table_info in table_info_list:
-			self.alter_one_table(mysql_connection, table_info)
+			self.alter_one_table(table_info)
 
-		self.create_triggers(mysql_connection)
-
-		if mysql_connection.is_connected():
-			mysql_connection.close()
-			print("Disconnected to MySQL Server version ", mysql_connection.get_server_info())
-
+		self.create_triggers()
 
 		self.write_validation_log()
 
@@ -94,24 +95,19 @@ class DataConversion:
 		mydb = open_connection_mysql(host, username, password)
 		mycursor = mydb.cursor()
 		mycursor.execute("SHOW DATABASES")
-		# mycursor.execute("SELECT schema_name FROM information_schema.schemata;")
-		mysql_table_list = [fetched_data[0] for fetched_data in mycursor]
-		# print(mysql_table_list)
+		mysql_table_list = [data[0].decode() if type(data[0]) is bytearray else data[0] for data in mycursor]
 
+		# print(mysql_table_list)
 		if self.validated_dbname in mysql_table_list:
 			mycursor.execute(f"DROP DATABASE {self.validated_dbname}")
-		
-		# print("DROPPPPPPPPPPPPPPPPPPPPPPPPPPPP")
-		# print(self.validated_dbname)
-		# print(mysql_table_list)
 		
 		mycursor.execute(f"CREATE DATABASE {self.validated_dbname}")
 		mycursor.close()
 		mydb.close()
 		print("Disconnected to MySQL Server version ", mydb.get_server_info())
 		mydb = open_connection_mysql(host, username, password, self.validated_dbname)
-		print("Create validated table successfully!")
-		return mydb
+		print("Create validated database successfully!")
+		return True
 
 
 	def get_tables_creating_info(self):
@@ -149,9 +145,9 @@ class DataConversion:
 			)
 		]
 		"""
-		db_schema = self.schema.get()
+		self.schema.load_schema()
 		columns_info_list = []
-		for column_schema in db_schema["all-table-columns"]:
+		for column_schema in self.schema.all_table_columns:
 			table_name= column_schema["short-name"].split(".")[0]
 			column_info = {
 				"uuid": column_schema["@uuid"],
@@ -192,11 +188,11 @@ class DataConversion:
 		return column_schema["default-value"]
 
 	def get_prefix_suffix_column_data_types_list(self):
-		db_schema = self.schema.get()
+		self.schema.load_schema()
 		# Get prefix and suffix of default value
 		## Get all column-data-type which have prefix and suffix
 		column_data_types_list = []
-		for column_schema in db_schema["all-table-columns"]:
+		for column_schema in self.schema.all_table_columns:
 			if type(column_schema["column-data-type"]) is dict:
 				if "literal-prefix" in column_schema["column-data-type"].keys():
 					print(column_schema["column-data-type"])
@@ -219,40 +215,60 @@ class DataConversion:
 
 		
 
-	def create_validated_tables(self, mysql_connection):
-		db_schema = self.schema.get()
+	def create_validated_tables(self):
+		print("Creating validated tables!")
 		table_info_list = self.get_table_info_list()
 		for table_info in table_info_list:
-			self.create_one_table(mysql_connection, table_info)
-		# for table_info in table_info_list:
-			# self.alter_one_table(mysql_connection, table_info)
+			self.create_one_table(table_info)
+		print("Creating validated tables done!")
 
 
-	def create_one_table(self, mysql_connection, table_info):
+	def create_one_table(self, table_info):
+		# print(table_info["table-name"])
 		columns_info_list = list(filter(lambda column_info: column_info["uuid"] in table_info["columns-uuid-list"], self.get_columns_info()))
-		primary_key_info = list(filter(lambda index_info: index_info["uuid"] == table_info["primary-key-uuid"], self.get_primary_indexes_info_list()))[0] 
-
-		#sql create column
+		primary_key_list = list(filter(lambda index_info: index_info["uuid"] == table_info["primary-key-uuid"], self.get_primary_indexes_info_list())) 
+		
 		sql_creating_columns_cmd = ",\n".join([self.generate_sql_creating_column(column_info) for column_info in columns_info_list])
-		#sql create primary key
-		sql_creating_key_cmd = self.generate_sql_creating_key(primary_key_info)
+
+		if len(primary_key_list) > 0:
+			primary_key_info = primary_key_list[0]
+			sql_creating_key_cmd = self.generate_sql_creating_key(primary_key_info)
+			sql_creating_columns_and_key_cmd = sql_creating_columns_cmd + ",\n" + sql_creating_key_cmd 
+		else:
+			col_dict = self.schema.get_columns_dict()
+			selected_key = table_info["indexes"][0]
+			if type(selected_key) is str:
+				key_name = col_dict[selected_key]
+				sql_creating_key_cmd = f"""KEY `{key_name}` (`{key_name}`)"""
+			else:
+				col_name_list = [f"`{col_dict[col_uuid]}`" for col_uuid in selected_key["columns"]]
+				sql_creating_key_cmd = f"""KEY `{selected_key["name"]}` ({",".join(col_name_list)})"""
 
 		sql_creating_columns_and_key_cmd = sql_creating_columns_cmd + ",\n" + sql_creating_key_cmd 
+
 		#sql create table
-		sql_creating_table_cmd = f"""CREATE TABLE {table_info["table-name"]} (\n{sql_creating_columns_and_key_cmd}\n) ENGINE={table_info["engine"]}"""# DEFAULT CHARSET={table_info["table-collation"]};"""
+		sql_creating_table_cmd = f"""CREATE TABLE `{table_info["table-name"]}` (\n{sql_creating_columns_and_key_cmd}\n) ENGINE={table_info["engine"]}"""# DEFAULT CHARSET={table_info["table-collation"]};"""
 		# print(sql_creating_table_cmd)
 		
-		# create table
-		# if table_info["table-name"] == "staff":
-		# print(sql_creating_table_cmd)
+		mysql_connection = open_connection_mysql(
+			self.schema_conv_init_option.host, 
+			self.schema_conv_init_option.username, 
+			self.schema_conv_init_option.password, 
+			self.validated_dbname)
 		mycursor = mysql_connection.cursor()
 		mycursor.execute(sql_creating_table_cmd)
 		mycursor.close()
+		mysql_connection.close()
 
-	def alter_one_table(self, mysql_connection, table_info):
+	def alter_one_table(self, table_info):
 		"""
 		Add foreign key constraints
 		"""
+		mysql_connection = open_connection_mysql(
+			self.schema_conv_init_option.host, 
+			self.schema_conv_init_option.username, 
+			self.schema_conv_init_option.password, 
+			self.validated_dbname)
 		fk_constraints_list = self.get_table_constraint_info_list(table_info["uuid"])
 		# sql creating constraint 
 		sql_creating_fk_cmd = ",\n".join(self.generate_sql_foreign_keys_list(fk_constraints_list))
@@ -261,6 +277,7 @@ class DataConversion:
 			mycursor = mysql_connection.cursor()
 			mycursor.execute(sql_altering_table_cmd)
 			mycursor.close()
+		mysql_connection.close()
 
 	def generate_sql_creating_column(self, column_info):
 		"""
@@ -279,7 +296,7 @@ class DataConversion:
 			)
 		"""
 		sql_cmd_list = []
-		sql_cmd_list.append(column_info["column-name"])
+		sql_cmd_list.append(f"""`{column_info["column-name"]}`""")
 		# creating_data_type = self.parse_mysql_data_type(column_info["column-type"], column_info["column-width"])
 		sql_cmd_list.append(column_info["column-type"])
 		# sql_cmd_list.append(creating_data_type)
@@ -293,7 +310,10 @@ class DataConversion:
 			if column_info["column-type"][:4] == "enum":
 				sql_cmd_list.append(f"""default '{column_info["default-value"]}'""")
 			else:
-				sql_cmd_list.append(f"""default {column_info["default-value"]}""")
+				if len(column_info["default-value"]) == 0:
+					sql_cmd_list.append(f"""default '{column_info["default-value"]}'""")
+				else:
+					sql_cmd_list.append(f"""default {column_info["default-value"]}""")
 		if column_info["auto-incremented"] is True:
 			sql_cmd_list.append("AUTO_INCREMENT")
 			# CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
@@ -441,8 +461,8 @@ class DataConversion:
 				key: "indexes", value: ???, ### may be neccesary or not, because primary key is auto indexed
 		"""
 		table_info_list = []
-		db_schema = self.schema.get()
-		for table_schema in db_schema["catalog"]["tables"]:
+		self.schema.load_schema()
+		for table_schema in self.schema.tables_schema:
 			if self.get_table_type(table_schema["table-type"]) == "TABLE":
 				table_info = {
 					"uuid": table_schema["@uuid"],
@@ -450,7 +470,8 @@ class DataConversion:
 					"engine": table_schema["attributes"]["ENGINE"],
 					# "table-collation": table_schema["attributes"]["TABLE_COLLATION"].split("_")[0],
 					"columns-uuid-list": table_schema["columns"],
-					"primary-key-uuid": table_schema["primary-key"]
+					"primary-key-uuid": table_schema["primary-key"],
+					"indexes": table_schema["indexes"]
 				}
 				table_info_list.append(table_info)
 		return table_info_list
@@ -466,8 +487,8 @@ class DataConversion:
 			return table_type["table-type"]
 		else:
 			table_type_dict = {}
-			db_schema = self.schema.get()
-			for table_schema in db_schema["catalog"]["tables"]:
+			self.schema.load_schema()
+			for table_schema in self.schema.tables_schema:
 				if type(table_schema["table-type"]) is dict:
 					table_type_dict[table_schema["table-type"]["@uuid"]] = table_schema["table-type"]["table-type"]
 			return table_type_dict[table_type]
@@ -484,9 +505,9 @@ class DataConversion:
 				key: "unique", value: <unique option>,
 			)
 		"""
-		db_schema = self.schema.get()
+		self.schema.load_schema()
 		indexes_info_list = []
-		for table_schema in db_schema["catalog"]["tables"]:
+		for table_schema in self.schema.tables_schema:
 			for index in table_schema["indexes"]:
 				if type(index) is dict:
 					if index["name"] == "PRIMARY":
@@ -506,8 +527,8 @@ class DataConversion:
 		"""
 		table_constraints_info = []
 		foreign_key_list = self.get_foreign_keys_list()
-		db_schema = self.schema.get()
-		table_schema = list(filter(lambda table_schema: table_schema["@uuid"] == table_uuid, db_schema["catalog"]["tables"]))[0]
+		self.schema.load_schema()
+		table_schema = list(filter(lambda table_schema: table_schema["@uuid"] == table_uuid, self.schema.tables_schema))[0]
 		table_constraints_list = list(filter(lambda tbl_constr: type(tbl_constr) is dict, table_schema["table-constraints"]))
 		table_constraint_name_list = list(map(lambda tbl_constr: tbl_constr["name"], table_constraints_list))
 		res = list(filter(lambda fk_info: fk_info["name"] in table_constraint_name_list, foreign_key_list))
@@ -530,9 +551,9 @@ class DataConversion:
 			)
 		]
 		"""
-		db_schema = self.schema.get()
+		self.schema.load_schema()
 		fk_keys_list = []
-		for table_schema in db_schema["catalog"]["tables"]:
+		for table_schema in self.schema.tables_schema:
 			for fk_schema in table_schema["foreign-keys"]:
 				if type(fk_schema) is dict:
 					col_refs = []
@@ -551,13 +572,13 @@ class DataConversion:
 					fk_keys_list.append(fk_info)
 		return fk_keys_list
 
-	def create_triggers(self, mysql_connection):
+	def create_triggers(self):
 		"""
 		Create MySQL triggers
 		"""
 		triggers_info_list = self.get_triggers_info_list()
 		for trigger_info in triggers_info_list:
-			self.create_one_trigger(mysql_connection, trigger_info)
+			self.create_one_trigger(trigger_info)
 
 	def get_triggers_info_list(self):
 		"""
@@ -574,9 +595,9 @@ class DataConversion:
 			)
 		]
 		"""
-		db_schema = self.schema.get()
+		self.schema.load_schema()
 		triggers_info_list = []
-		for table_schema in db_schema["catalog"]["tables"]:
+		for table_schema in self.schema.tables_schema:
 			for trigger in table_schema["triggers"]:
 				if type(trigger) is dict:
 					trigger_info = {
@@ -591,40 +612,44 @@ class DataConversion:
 					triggers_info_list.append(trigger_info)
 		return triggers_info_list
 
-	def create_one_trigger(self, mysql_connection, trigger_info):
+	def create_one_trigger(self, trigger_info):
 		"""
 		"""
+		mysql_connection = open_connection_mysql(
+			self.schema_conv_init_option.host, 
+			self.schema_conv_init_option.username, 
+			self.schema_conv_init_option.password, 
+			self.validated_dbname)
 		sql_create_trigger = f"""CREATE TRIGGER {trigger_info["trigger-name"]} {trigger_info["condition-timing"]} {trigger_info["event-manipulation-type"]} ON {trigger_info["table-name"]} FOR EACH {trigger_info["action-orientation"]} {trigger_info["action-statement"]}"""
 		# print(sql_create_trigger)
 		mycursor = mysql_connection.cursor()
 		mycursor.execute(sql_create_trigger)
 		mycursor.close()
+		mysql_connection.close()
 
 
-	def migrate_mongodb_to_mysql(self, mysql_connection):
+	def migrate_mongodb_to_mysql(self):
 		"""
 		Migrate data from MongoDB back to MySQL
 		"""
 		# for collection_name in self.schema.get_tables_name_list():
-		for collection_name in self.schema.get_tables_name_list()[:]:
-			self.migrate_one_collection_to_table(mysql_connection, collection_name)
+		print("Migrate from MongoDB to MySQL!")
+		# for collection_name in self.schema.get_tables_name_list()[:]:
+			# self.migrate_one_collection_to_table(collection_name)
+		pool = Pool()
+		pool.map(self.migrate_one_collection_to_table, self.schema.get_tables_name_list()[:])
+		print("Migrate from MongoDB to MySQL done!")
 
-	def migrate_one_collection_to_table(self, mysql_connection, collection_name):
+
+	def migrate_one_collection_to_table(self, collection_name):
 		"""
 		Migrate one collection from MongoDB back to MySQL
 		"""
-		datas = load_mongodb_collection(
-			self.schema_conv_output_option.host, 
-			self.schema_conv_output_option.username, 
-			self.schema_conv_output_option.password, 
-			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname, 
-			collection_name
-		)
-		db_schema = self.schema.get()
+		# Generate INSERT SQL
+		self.schema.load_schema()
 		column_dtype_dict = self.schema.get_table_column_and_data_type()[collection_name]
 		col_dict = self.schema.get_columns_dict()
-		table_coluuid_list = list(filter(lambda table_schema: table_schema["name"] == collection_name, db_schema["catalog"]["tables"]))[0]["columns"]
+		table_coluuid_list = list(filter(lambda table_schema: table_schema["name"] == collection_name, self.schema.tables_schema))[0]["columns"]
 		columns_name_list = [col_dict[col_uuid] for col_uuid in table_coluuid_list]
 		columns_num = len(columns_name_list)
 
@@ -637,41 +662,90 @@ class DataConversion:
 						columns_name_sql[i] = f"ST_GeomFromText({columns_name_sql[i]})"
 						break
 
+		sql = f"""INSERT IGNORE INTO `{collection_name}` ({", ".join([f"`{column_name}`" for column_name in columns_name_list])}) VALUES ({", ".join(columns_name_sql)})"""
+		
+		# Prepare INSERT VALUE
+		mysql_connection = open_connection_mysql(
+			self.schema_conv_init_option.host, 
+			self.schema_conv_init_option.username, 
+			self.schema_conv_init_option.password, 
+			self.validated_dbname)
 		mycursor = mysql_connection.cursor()
-		sql = f"""INSERT IGNORE INTO {collection_name} ({", ".join(columns_name_list)}) VALUES ({", ".join(columns_name_sql)})"""
-		# val = [[data[key] for key in columns_name_list] for data in datas]
-		val = []
-		for data in datas:
-			row = []
-			for key in columns_name_list:
-				if key in data.keys():
-					dtype = type(data[key])
-					if self.find_converted_dtype(column_dtype_dict[key]) == "text":
-						# with open(f"blob_and_text_file/{self.resource_id}/{collection_name}/{key}") as f:
-						with open(data[key]) as f:
-							cell_data = f.read()
-					elif self.find_converted_dtype(column_dtype_dict[key]) == "blob":
-						# with open(f"blob_and_text_file/{self.resource_id}/{collection_name}/{key}", "rb") as f:
-						with open(data[key], "rb") as f:
-							cell_data = f.read()
-					elif dtype is Decimal128:
-						cell_data = data[key].to_decimal()
-					elif dtype is list:
-						# return
-						cell_data = ",".join(data[key])
-					elif dtype is dict:
-						print(data[key])
-						return
+
+		mongodb_connection = open_connection_mongodb(
+			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.username, 
+			self.schema_conv_output_option.password, 
+			self.schema_conv_output_option.port, 
+			self.schema_conv_output_option.dbname)
+		collection = mongodb_connection[collection_name]
+
+		offset = 0
+		max_limit = 200000
+		doc_count = collection.find().count()
+		while offset + 1 < doc_count or (offset == 0 and doc_count == 1):
+			if offset + max_limit + 1 > doc_count:
+				limit = doc_count - offset
+			else:
+				limit = max_limit
+
+			datas = collection.find().skip(offset).limit(limit)
+			offset = offset + limit
+
+			val = []
+			for data in datas:
+				row = []
+				for key in columns_name_list:
+					if key in data.keys():
+						dtype = type(data[key])
+						if self.find_converted_dtype(column_dtype_dict[key]) == "text":
+							# with open(f"blob_and_text_file/{self.resource_id}/{collection_name}/{key}") as f:
+							with open(data[key], newline="\n") as f:
+								cell_data = f.read()
+						elif self.find_converted_dtype(column_dtype_dict[key]) == "blob":
+							# with open(f"blob_and_text_file/{self.resource_id}/{collection_name}/{key}", "rb") as f:
+							# with open(data[key], "rb", newline="\n") as f:
+							with open(data[key], "rb") as f:
+								cell_data = f.read()
+								# print(cell_data)
+						elif dtype is bson.Int64:
+							cell_data = int(data[key])
+						elif dtype is Decimal128:
+							cell_data = data[key].to_decimal()
+						elif dtype is list:
+							# return
+							cell_data = ",".join(data[key])
+						elif dtype is dict: #JSON
+							cell_data = json.dumps(data[key])
+						else:
+							cell_data = data[key]
 					else:
-						cell_data = data[key]
-				else:
-					cell_data = None
-				row.append(cell_data)
-			val.append(row)
-		mycursor.executemany(sql, val)
-		mysql_connection.commit()
+						cell_data = None
+					row.append(cell_data)
+				val.append(row)
+			mycursor.executemany(sql, val)
+			mysql_connection.commit()
+
+		mycursor.close()
+		mysql_connection.close()
 		print("Insert done!")		
 
+	def mysql_count_row(self, dbname):
+		mysql_conn = open_connection_mysql(
+			self.schema_conv_init_option.host, 
+			self.schema_conv_init_option.username, 
+			self.schema_conv_init_option.password,
+			dbname
+			)
+		row_count = {}
+		mysql_cur = mysql_conn.cursor()
+		for table_name in self.schema.get_tables_name_list():
+			mysql_cur.execute(f"SELECT COUNT(*) FROM `{table_name}`")
+			num_of_rows = mysql_cur.fetchone()[0]
+			row_count[table_name] = num_of_rows
+		mysql_cur.close()
+		mysql_conn.close()
+		return row_count
 
 	
 	def write_validation_log(self):
@@ -687,6 +761,7 @@ class DataConversion:
 		"""
 		print("Start writing log!")
 		
+		writing_data = {}
 
 		mongodb_conn = open_connection_mongodb(
 			self.schema_conv_output_option.host, 
@@ -695,7 +770,38 @@ class DataConversion:
 			self.schema_conv_output_option.port,
 			self.schema_conv_output_option.dbname)
 
+		all_database_count = {}
+		all_database_count.update({f"mysql_{self.schema_conv_init_option.dbname}": self.mysql_count_row(self.schema_conv_init_option.dbname)})
+		all_database_count.update({f"mysql_{self.validated_dbname}": self.mysql_count_row(self.validated_dbname)})
 
+		mongo_count = {}
+		for table_name in self.schema.get_tables_name_list():
+			collection = mongodb_conn[table_name]
+			mongo_count.update({table_name: collection.find().count()})
+		all_database_count.update({f"mongo_{self.schema_conv_output_option.dbname}": mongo_count})
+		writing_data.update({"row-count": all_database_count})
+
+		
+
+		
+		conversion_log = {}
+		# for table_name in self.schema.get_tables_name_list():
+		pool = Pool()
+		log_list = pool.map(self.prepare_one_table_log, self.schema.get_tables_name_list())
+
+		for log_item in log_list:
+			conversion_log.update(log_item)
+
+		writing_data.update({"conversion-log": conversion_log})
+		with open(f"./conversion_log/{self.resource_id}/log.json", 'w') as f:
+			json.dump(writing_data, f, indent=4)
+			# store_json_to_mongodb(mongodb_conn, "validating_log", log_data)
+
+		print("Writing log done!")
+
+	def prepare_one_table_log(self, table_name):
+		# print(f"Start writing log of table {table_name}")
+		table_columns_list = self.schema.get_table_column_and_data_type()
 		mysql_conn = open_connection_mysql(
 			self.schema_conv_init_option.host, 
 			self.schema_conv_init_option.username, 
@@ -703,63 +809,83 @@ class DataConversion:
 			)
 		mysql_cur = mysql_conn.cursor()
 
-		table_columns_list = self.schema.get_table_column_and_data_type()
+		schema_validating_sql = f"""
+			SELECT column_name,ordinal_position,data_type,column_type FROM
+			(
+			    SELECT
+			        column_name,ordinal_position,
+			        data_type,column_type,COUNT(1) rowcount
+			    FROM information_schema.columns
+			    WHERE
+			    (
+			        (table_schema='{self.schema_conv_init_option.dbname}' AND table_name='{table_name}') OR
+			        (table_schema='{self.validated_dbname}' AND table_name='{table_name}')
+			    )
+			    GROUP BY
+			        column_name,ordinal_position,
+			        data_type,column_type
+			    HAVING COUNT(1)=1
+			) A;
+		"""
 
-		for table_name in self.schema.get_tables_name_list():
-			schema_validating_sql = f"""
-				SELECT column_name,ordinal_position,data_type,column_type,column_key FROM
-				(
-				    SELECT
-				        column_name,ordinal_position,
-				        data_type,column_type,column_key,COUNT(1) rowcount
-				    FROM information_schema.columns
-				    WHERE
-				    (
-				        (table_schema='{self.schema_conv_init_option.dbname}' AND table_name='{table_name}') OR
-				        (table_schema='{self.validated_dbname}' AND table_name='{table_name}')
-				    )
-				    GROUP BY
-				        column_name,ordinal_position,
-				        data_type,column_type,column_key
-				    HAVING COUNT(1)=1
-				) A;
-			"""
+		log_data = {}
 
-			columns_of_table = list(table_columns_list[table_name])
-			columns_sql = ",".join(columns_of_table)
+		mysql_cur.execute(schema_validating_sql)
+		schema_validating_data = mysql_cur.fetchall()
+		res_schema = [tuple(str(ele) for ele in tup) for tup in schema_validating_data]
+		# print(2)
+		log_data["schema"] = res_schema
+		key_list = self.schema.get_primary_key_dict()[table_name]
+		# print(key_list)
+		sql_order = ",".join(key_list)
+		# sql_order = "(" + sql_order + ")"
+		# print(sql_order)
 
+		columns_of_table = list(table_columns_list[table_name])
+		columns_sql = ",".join([f"`{col_name}`" for col_name in columns_of_table])
+
+		dtype_dict = self.schema.get_table_column_and_data_type()
+		# print(dtype_dict)
+		sql_selected_columns = ",".join([f"CAST(`{col_name}` AS CHAR) AS `{col_name}`" if dtype_dict[table_name][col_name] == "FLOAT" else f"`{col_name}`" for col_name in columns_of_table])
+
+		offset = 0
+		max_limit = 200000
+		row_count = self.mysql_count_row(self.schema_conv_init_option.dbname)[table_name]
+		log_data["data"] = []
+		while offset + 1 < row_count or (offset == 0 and row_count == 1):
+			if offset + max_limit + 1 > row_count:
+				limit = row_count - offset
+			else:
+				limit = max_limit
+			
 			data_validating_sql = f"""
 				select {columns_sql}
 				from
 				(
-					SELECT * FROM {self.schema_conv_init_option.dbname}.{table_name} as A
+					(SELECT {sql_selected_columns} FROM {self.schema_conv_init_option.dbname}.`{table_name}` ORDER BY {sql_order} LIMIT {offset}, {limit})
 					union all
-					SELECT * FROM {self.validated_dbname}.{table_name} as B
+					(SELECT {sql_selected_columns} FROM {self.validated_dbname}.`{table_name}` ORDER BY {sql_order} LIMIT {offset}, {limit})
 				) as C
 				group by {columns_sql}
 				having count(*) = 1
 			"""
-
-			log_data = {}
-			log_data["table-name"] = table_name
-
-			mysql_cur.execute(schema_validating_sql)
-			schema_validating_data = mysql_cur.fetchall()
-			log_data["schema"] = schema_validating_data
+			# if limit == 138:
+				# print(data_validating_sql)
 
 			mysql_cur.execute(data_validating_sql)
 			data_validating_data = mysql_cur.fetchall()
-			cast_data = list(map(lambda ele: str(ele), data_validating_data))
-			log_data["data"] = cast_data
+			res_data = [tuple(str(ele) for ele in tup) for tup in data_validating_data]
+			log_data["data"] = log_data["data"] + res_data
 
-			with open(f"./conversion_log/{self.resource_id}/log.json", 'w') as f:
-				json.dump(log_data, f)
-			# store_json_to_mongodb(mongodb_conn, "validating_log", log_data)
-
+			offset = offset + limit
+		
 		mysql_cur.close()
 		mysql_conn.close()
-		print("Writing log done!")
+		
+		# print(f"Write log of table {table_name} done!")
 
+		return {table_name: log_data}
+		
 
 	def find_converted_dtype(self, mysql_dtype):
 		"""
@@ -806,28 +932,106 @@ class DataConversion:
 		"""
 		Migrate data from MySQL to MongoDB.
 		"""
-		for table in self.schema.get_tables_name_list():
-			self.migrate_one_table_to_collection(table)
-		# table_name_list = self.schema.get_tables_name_list()
-		# with Pool() as pool:
-		# 	pool.map(self.migrate_one_table_to_collection, table_name_list)
-		# 	pool.close()
-		# 	pool.join()
+		# for table in self.schema.get_tables_name_list():
+			# self.migrate_one_table_to_collection(table)
+		table_name_list = self.schema.get_tables_name_list()
+		pool = Pool()
+		pool.map(self.migrate_one_table_to_collection, table_name_list)
 
+	# def migrate_one_table_to_collection(self, table_name):
+	# 	"""
+	# 	Migrate 200.000 rows per time
+	# 	"""
+	# 	colname_coltype_dict = self.schema.get_table_column_and_data_type()[table_name]
+	# 	try:
+	# 		db_connection = open_connection_mysql(
+	# 			self.schema_conv_init_option.host, 
+	# 			self.schema_conv_init_option.username, 
+	# 			self.schema_conv_init_option.password, 
+	# 			self.schema_conv_init_option.dbname, 
+	# 		)
+	# 		if db_connection.is_connected():
+	# 			# mongodb_connection = open_connection_mongodb(
+	# 			# 	self.schema_conv_output_option.host, 
+	# 			# 	self.schema_conv_output_option.username, 
+	# 			# 	self.schema_conv_output_option.password, 
+	# 			# 	self.schema_conv_output_option.port, 
+	# 			# 	self.schema_conv_output_option.dbname
+	# 				# )
 
+	# 			sql_count = f"SELECT COUNT(*) FROM {table_name};"
+	# 			db_cursor = db_connection.cursor()
+	# 			db_cursor.execute(sql_count)
+
+	# 			sql_cmd = "SELECT"
+	# 			for col_name in colname_coltype_dict.keys():
+	# 				# col_fetch_seq.append(col_name)
+	# 				dtype = colname_coltype_dict[col_name]
+	# 				target_dtype = self.find_converted_dtype(dtype)
+
+	# 				# Generating SQL for selecting from MySQL Database
+	# 				if target_dtype is None:
+	# 					raise Exception(f"Data type {dtype} has not been handled!")
+	# 				elif target_dtype == "single-geometry":
+	# 					sql_cmd = sql_cmd + " ST_AsText(" + col_name + "),"
+	# 				else:
+	# 					sql_cmd = sql_cmd + " `" + col_name + "`,"
+
+	# 			row_count = db_cursor.fetchone()[0]
+	# 			db_cursor.close()
+	# 			db_connection.close()
+
+	# 			# offset = 0
+	# 			max_limit = 50000
+
+	# 			step_list = list(range(0, row_count, max_limit))
+	# 			step_range = [(step_list[i], step_list[i + 1]) for i in range(len(step_list) - 1)]
+	# 			pool = Pool()
+	# 			pool.starmap(self.para, zip(repeat(table_name), repeat(sql_cmd), step_range))
+
+	# 		else:
+	# 			print("Connect fail!")
 		
+	# 	except Exception as e:
+	# 		print("Error while writing to MongoDB", e)
+		
+	# 	finally:
+	# 		if (db_connection.is_connected()):
+	# 			db_connection.close()
+	# 			print("MySQL connection is closed!")
+
+	# def para(self, table_name, sql_cmd, offset_limit):
+	# 	offset, limit = offset_limit
+	# 	db_connection = open_connection_mysql(
+	# 		self.schema_conv_init_option.host, 
+	# 		self.schema_conv_init_option.username, 
+	# 		self.schema_conv_init_option.password, 
+	# 		self.schema_conv_init_option.dbname, 
+	# 	)
+	# 	#join sql
+	# 	sql_select = sql_cmd[:-1] + f" FROM `{table_name}` LIMIT {offset}, {limit}"
+	# 	db_cursor = db_connection.cursor();
+	# 	#execute sql
+	# 	db_cursor.execute(sql_select)
+	# 	#fetch data and convert
+	# 	fetched_data = db_cursor.fetchall()
+	# 	db_cursor.close()
+	# 	db_connection.close()
+
+	# 	convert_data_list = self.store_fetched_data_to_mongodb(table_name, fetched_data)
+	# 	mongodb_connection = open_connection_mongodb(
+	# 	self.schema_conv_output_option.host, 
+	# 	self.schema_conv_output_option.username, 
+	# 	self.schema_conv_output_option.password, 
+	# 	self.schema_conv_output_option.port, 
+	# 	self.schema_conv_output_option.dbname
+	# 	)
+	# 	store_json_to_mongodb(mongodb_connection, table_name, convert_data_list)
+
 	def migrate_one_table_to_collection(self, table_name):
-		fetched_data_list = self.get_fetched_data_list(table_name)
-		convert_data_list = self.store_fetched_data_to_mongodb(table_name, fetched_data_list)
-		mongodb_connection = open_connection_mongodb(
-			self.schema_conv_output_option.host, 
-			self.schema_conv_output_option.username, 
-			self.schema_conv_output_option.password, 
-			self.schema_conv_output_option.port,
-			self.schema_conv_output_option.dbname)
-		store_json_to_mongodb(mongodb_connection, table_name, convert_data_list)
-		
-	def get_fetched_data_list(self, table_name):
+		"""
+		Migrate 200.000 rows per time
+		"""
 		colname_coltype_dict = self.schema.get_table_column_and_data_type()[table_name]
 		try:
 			db_connection = open_connection_mysql(
@@ -837,7 +1041,18 @@ class DataConversion:
 				self.schema_conv_init_option.dbname, 
 			)
 			if db_connection.is_connected():
-				# col_fetch_seq = []
+				mongodb_connection = open_connection_mongodb(
+					self.schema_conv_output_option.host, 
+					self.schema_conv_output_option.username, 
+					self.schema_conv_output_option.password, 
+					self.schema_conv_output_option.port, 
+					self.schema_conv_output_option.dbname
+					)
+
+				sql_count = f"SELECT COUNT(*) FROM `{table_name}`;"
+				db_cursor = db_connection.cursor()
+				db_cursor.execute(sql_count)
+
 				sql_cmd = "SELECT"
 				for col_name in colname_coltype_dict.keys():
 					# col_fetch_seq.append(col_name)
@@ -851,15 +1066,31 @@ class DataConversion:
 						sql_cmd = sql_cmd + " ST_AsText(" + col_name + "),"
 					else:
 						sql_cmd = sql_cmd + " `" + col_name + "`,"
-				#join sql
-				sql_cmd = sql_cmd[:-1] + " FROM " + table_name
-				db_cursor = db_connection.cursor();
-				#execute sql
-				db_cursor.execute(sql_cmd)
-				#fetch data and convert
-				fetched_data = db_cursor.fetchall()
+
+				row_count = db_cursor.fetchone()[0]
+				offset = 0
+				max_limit = 200000
+				while offset + 1 < row_count or (offset == 0 and row_count == 1):
+					if offset + max_limit + 1 > row_count:
+						limit = row_count - offset
+					else:
+						limit = max_limit
+
+					#join sql
+					sql_select = sql_cmd[:-1] + f" FROM `{table_name}` LIMIT {offset}, {limit}"
+					db_cursor = db_connection.cursor();
+					#execute sql
+					db_cursor.execute(sql_select)
+					#fetch data and convert
+					fetched_data = db_cursor.fetchall()
+
+					convert_data_list = self.store_fetched_data_to_mongodb(table_name, fetched_data)
+					store_json_to_mongodb(mongodb_connection, table_name, convert_data_list)
+
+					offset = offset + limit
+					# print(offset)
+
 				db_cursor.close()
-				return fetched_data 
 			else:
 				print("Connect fail!")
 		
@@ -870,7 +1101,6 @@ class DataConversion:
 			if (db_connection.is_connected()):
 				db_connection.close()
 				print("MySQL connection is closed!")
-
 
 	def store_fetched_data_to_mongodb(self, table_name, fetched_data):
 		"""
@@ -889,10 +1119,19 @@ class DataConversion:
 				#generate SQL
 				cell_data = row[i]
 				if cell_data != None:
-					if dtype == "VARBINARY":
+					if dtype in ["INT", "INTEGER", "BIGINT"]:
+						converted_data = bson.Int64(cell_data)
+					# elif dtype == "BIGINT":
+						# print(type(cell_data))
+						# return
+					elif dtype == "JSON":
+							converted_data = json.loads(cell_data)
+					elif dtype == "BINARY":
 						converted_data = bytes(cell_data)
-					elif dtype == "VARCHAR":
-						converted_data = str(cell_data)
+					elif dtype == "VARBINARY":
+						converted_data = bytes(cell_data)
+					# elif dtype == "VARCHAR":
+						# converted_data = str(cell_data)
 					elif dtype == "DATE":
 						converted_data = datetime(cell_data.year, cell_data.month, cell_data.day)#, cell_data.hour, cell_data.minute, cell_data.second)
 					elif target_dtype == "decimal":
@@ -908,63 +1147,135 @@ class DataConversion:
 						os.system(f"mkdir -p ./{file_dir_path}")
 						converted_data = f"{file_dir_path}/{count_blob_text}"
 						if target_dtype == "blob":
+							# with open(f"./{file_dir_path}/{count_blob_text}", "wb", newline="\n") as out:
 							with open(f"./{file_dir_path}/{count_blob_text}", "wb") as out:
 								out.write(cell_data)
 						else:
-							with open(f"./{file_dir_path}/{count_blob_text}", "a") as out:
+							with open(f"./{file_dir_path}/{count_blob_text}", "w", newline="\n") as out:
 								out.write(cell_data)
 
 						count_blob_text = count_blob_text + 1
+					elif target_dtype == "string":
+						if type(cell_data) is bytearray:
+							converted_data = cell_data.decode("utf-8")
+						else:
+							converted_data = str(cell_data)
 					else:
 						converted_data = cell_data
 					data[col_fetch_seq[i]] = converted_data 
 			rows.append(data)
 		return rows
 
+	# def convert_relations_to_references(self):
+	# 	"""
+	# 	Convert relations of MySQL table to database references of MongoDB
+	# 	"""
+	# 	print("Start convert relations")
+	# 	tables_name_list = self.schema.get_tables_name_list()
+	# 	tables_relations = self.schema.get_tables_relations()
+	# 	edited_table_relations_dict = {}
+	# 	original_tables_set = set([tables_relations[key]["primary_key_table"] for key in tables_relations])
+
+	# 	# Edit relations of table dictionary
+	# 	for original_table in original_tables_set:
+	# 		for key in tables_relations:
+	# 			if tables_relations[key]["primary_key_table"] == original_table:
+	# 				if original_table not in edited_table_relations_dict.keys():
+	# 					edited_table_relations_dict[original_table] = []
+	# 				edited_table_relations_dict[original_table] = edited_table_relations_dict[original_table] + [extract_dict(["primary_key_column", "foreign_key_table", "foreign_key_column"])(tables_relations[key])]
+	# 	# Convert each relation of each table
+	# 	for original_collection_name in tables_name_list:
+	# 		if original_collection_name in original_tables_set:
+	# 			for relation_detail in edited_table_relations_dict[original_collection_name]:
+	# 				referencing_collection_name = relation_detail["foreign_key_table"]
+	# 				original_key = relation_detail["primary_key_column"]
+	# 				referencing_key = relation_detail["foreign_key_column"]
+	# 				self.convert_one_relation_to_reference(original_collection_name, referencing_collection_name, original_key, referencing_key) 
+	# 	print("Convert relations successfully!")
+
 	def convert_relations_to_references(self):
 		"""
 		Convert relations of MySQL table to database references of MongoDB
-		"""
-		tables_name_list = self.schema.get_tables_name_list()
-		tables_relations = self.schema.get_tables_relations()
-		# converting_tables_order = specify_sequence_of_migrating_tables(schema_file)
-		edited_table_relations_dict = {}
-		original_tables_set = set([tables_relations[key]["primary_key_table"] for key in tables_relations])
+		Table relations:
+		Dict(
+			key: <relation uuid>,
+			values: Dict(
+				"primary_key_table": <primary table name>,
+				"foreign_key_table": <foreign table name>,
+				"key_columns": List[
+					Dict(
+						"primary_key_column": <primary column name>,
+						"foreign_key_column": <foreign column name>
+					)
+				]
+			)
 
-		# Edit relations of table dictionary
-		for original_table in original_tables_set:
-			for key in tables_relations:
-				if tables_relations[key]["primary_key_table"] == original_table:
-					if original_table not in edited_table_relations_dict.keys():
-						edited_table_relations_dict[original_table] = []
-					edited_table_relations_dict[original_table] = edited_table_relations_dict[original_table] + [extract_dict(["primary_key_column", "foreign_key_table", "foreign_key_column"])(tables_relations[key])]
-		# Convert each relation of each table
-		for original_collection_name in tables_name_list:
-			if original_collection_name in original_tables_set:
-				for relation_detail in edited_table_relations_dict[original_collection_name]:
-					referencing_collection_name = relation_detail["foreign_key_table"]
-					original_key = relation_detail["primary_key_column"]
-					referencing_key = relation_detail["foreign_key_column"]
-					self.convert_one_relation_to_reference(original_collection_name, referencing_collection_name, original_key, referencing_key) 
+		)
+		"""
+		# tables_name_list = self.schema.get_tables_name_list()
+		# edited_table_relations_dict = {}
+		# original_tables_set = set([tables_relations[key]["primary_key_table"] for key in tables_relations])
+
+		# # Edit relations of table dictionary
+		# for original_table in original_tables_set:
+		# 	for key in tables_relations:
+		# 		if tables_relations[key]["primary_key_table"] == original_table:
+		# 			if original_table not in edited_table_relations_dict.keys():
+		# 				edited_table_relations_dict[original_table] = []
+		# 			edited_table_relations_dict[original_table] = edited_table_relations_dict[original_table] + [extract_dict(["primary_key_column", "foreign_key_table", "foreign_key_column"])(tables_relations[key])]
+
+		# # Convert each relation of each table
+		# relation_list = []
+		# for original_collection_name in original_tables_set:
+		# 	for relation_detail in edited_table_relations_dict[original_collection_name]:
+		# 		relation_dict = {
+		# 			"original-collection-name": original_collection_name,
+		# 			"referencing-collection-name": relation_detail["foreign_key_table"],
+		# 			"original-key": relation_detail["primary_key_column"],
+		# 			"referencing-key": relation_detail["foreign_key_column"]
+		# 		}
+		# 		relation_list.append(relation_dict)
+
+		print("Start convert relations")
+		tables_relations = self.schema.get_tables_relations()
+		relation_list = list(tables_relations.values())
+
+		pool = Pool()
+		pool.map(self.convert_one_relation_to_reference, relation_list)		
 		print("Convert relations successfully!")
 
-
-	def convert_one_relation_to_reference(self, original_collection_name, referencing_collection_name, original_key, referencing_key):
+	def convert_one_relation_to_reference(self, relation_detail):
 		"""
 		Convert one relation of MySQL table to database reference of MongoDB
 		"""
+		original_collection_name = relation_detail["primary_key_table"] 
+		referencing_collection_name = relation_detail["foreign_key_table"]
+		key_columns_list = relation_detail["key_columns"]
+		# print(key_columns_list)
 		db_connection = open_connection_mongodb(
 			self.schema_conv_output_option.host, 
 			self.schema_conv_output_option.username, 
 			self.schema_conv_output_option.password, 
 			self.schema_conv_output_option.port,
 			self.schema_conv_output_option.dbname)
+
 		original_collection_connection = db_connection[original_collection_name]
-		original_documents = original_collection_connection.find()
+
+		finding_field = {}
+		for key_pair in key_columns_list:
+			finding_field[key_pair["primary_key_column"]] = 1
+
+		original_documents = original_collection_connection.find({}, finding_field)
+
 		new_referenced_key_dict = {}
 		for doc in original_documents:
-			new_referenced_key_dict[doc[original_key]] = doc["_id"]
+			new_referenced_key_dict[tuple([doc[original_key] for original_key in list(finding_field.keys())])] = doc["_id"]
 
+		ref_keys_list = [key_pair["foreign_key_column"] for key_pair in key_columns_list]
+		# if original_collection_name == "table_self":
+			# print(ref_keys_list)
+			# print(key_columns_list)
+		referencing_key = "_".join(ref_keys_list)
 		referencing_documents = db_connection[referencing_collection_name]
 		for key in new_referenced_key_dict:
 			new_reference = {}
@@ -972,6 +1283,37 @@ class DataConversion:
 			new_reference["$id"] = new_referenced_key_dict[key]
 			new_reference["$db"] = self.schema_conv_output_option.dbname
 			referencing_key_new_name = "db_ref_" + referencing_key
-			referencing_documents.update_many({referencing_key: key}, update={"$set": {referencing_key_new_name: new_reference}})
+			update_query = {}
+			for i in range(len(ref_keys_list)):
+				update_query[ref_keys_list[i]] = key[i] 
+			# print(update_query)
+			referencing_documents.update_many(update_query, update={"$set": {referencing_key_new_name: new_reference}})
+
+	
+
+	# def convert_one_relation_to_reference(self, original_collection_name, referencing_collection_name, original_key, referencing_key):
+	# 	"""
+	# 	Convert one relation of MySQL table to database reference of MongoDB
+	# 	"""
+	# 	db_connection = open_connection_mongodb(
+	# 		self.schema_conv_output_option.host, 
+	# 		self.schema_conv_output_option.username, 
+	# 		self.schema_conv_output_option.password, 
+	# 		self.schema_conv_output_option.port,
+	# 		self.schema_conv_output_option.dbname)
+	# 	original_collection_connection = db_connection[original_collection_name]
+	# 	original_documents = original_collection_connection.find({}, {original_key: 1})
+	# 	new_referenced_key_dict = {}
+	# 	for doc in original_documents:
+	# 		new_referenced_key_dict[doc[original_key]] = doc["_id"]
+
+	# 	referencing_documents = db_connection[referencing_collection_name]
+	# 	for key in new_referenced_key_dict:
+	# 		new_reference = {}
+	# 		new_reference["$ref"] = original_collection_name
+	# 		new_reference["$id"] = new_referenced_key_dict[key]
+	# 		new_reference["$db"] = self.schema_conv_output_option.dbname
+	# 		referencing_key_new_name = "db_ref_" + referencing_key
+	# 		referencing_documents.update_many({referencing_key: key}, update={"$set": {referencing_key_new_name: new_reference}})
 
 	

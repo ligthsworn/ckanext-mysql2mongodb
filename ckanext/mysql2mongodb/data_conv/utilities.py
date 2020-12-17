@@ -14,6 +14,8 @@ def extract_dict(selected_keys):
 	def extract_dict(input_dict):
 		output_dict = {}
 		for key in selected_keys:
+			# print(input_dict)
+			# print(type(input_dict))
 			output_dict[str(key)] = input_dict[str(key)]
 		return output_dict
 	return extract_dict
@@ -123,22 +125,32 @@ def load_mongodb_collection(host, username, password, port, dbname, collection_n
 	res = [doc for doc in docs]
 	return res
 
-def open_connection_mysql(host, username, password, dbname = None):
+def open_connection_mysql(host, username, password, dbname = None, charset = None):
 	"""
 	Set up a connection to MySQL database.
 	Return a MySQL (connector) connection object if success, otherwise None.
 	"""
 	try:
-		db_connection = mysql.connector.connect(
-			host = host, 
-			user = username, 
-			password = password, 
-			database = dbname,
-			auth_plugin='mysql_native_password'
-		)
+		if charset is None:
+			db_connection = mysql.connector.connect(
+				host = host, 
+				user = username, 
+				password = password, 
+				database = dbname,
+				auth_plugin='mysql_native_password'
+			)
+		else:
+			db_connection = mysql.connector.connect(
+				host = host, 
+				user = username, 
+				password = password, 
+				database = dbname,
+				auth_plugin='mysql_native_password',
+				charset = charset
+			)
 		if db_connection.is_connected():
 			db_info = db_connection.get_server_info()
-			print("Connected to MySQL Server version ", db_info)
+			# print("Connected to MySQL Server version ", db_info)
 
 			return db_connection
 		else:

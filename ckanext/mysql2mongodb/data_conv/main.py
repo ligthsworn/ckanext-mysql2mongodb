@@ -1,14 +1,69 @@
-from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
-from ckanext.mysql2mongodb.data_conv.database_connection import ConvInitOption, ConvOutputOption
-from ckanext.mysql2mongodb.data_conv.data_conversion import DataConversion
-from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql
+# from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
+# from ckanext.mysql2mongodb.data_conv.database_connection import ConvInitOption, ConvOutputOption
+# from ckanext.mysql2mongodb.data_conv.data_conversion import DataConversion
+# from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql
+from schema_conversion import SchemaConversion
+from database_connection import ConvInitOption, ConvOutputOption
+from data_conversion import DataConversion
+from utilities import open_connection_mysql
 import urllib, json, re, os, requests
-from pprint import pprint
+
+def test():
+	try:
+		print("Start conversion!")
+
+		db_conf = read_database_config()
+		package_conf = read_package_config()
+
+		# schema_name = "Chinook"
+		# schema_name = "classicmodels"
+		# schema_name = "compose_key"
+		# schema_name = "northwind"
+		# schema_name = "sakila"
+		# schema_name = "sportsdb_qa"
+		# schema_name = "world"
+		# schema_name = "world_x"
+		# schema_name = "xtoss"
+		# schema_name = "employees"
+		schema_name = "sample_ip"
+
+		mysql_host = db_conf["mysql_host"]
+		mysql_username = db_conf["mysql_username"]
+		mysql_password = db_conf["mysql_password"]
+		mysql_port = db_conf["mysql_port"]
+		mysql_dbname = schema_name
+		
+		os.system(f"mkdir -p ./blob_and_text_file/{schema_name}")
+		os.system(f"mkdir -p ./conversion_log/{schema_name}")
+		
+		schema_conv_init_option = ConvInitOption(host = mysql_host, username = mysql_username, password = mysql_password, port = mysql_port, dbname = mysql_dbname)
+
+		mongodb_host = db_conf["mongodb_host"]
+		mongodb_username = db_conf["mongodb_username"]
+		mongodb_password = db_conf["mongodb_password"]
+		mongodb_port = db_conf["mongodb_port"]
+		mongodb_dbname = schema_name
+		schema_conv_output_option = ConvOutputOption(host = mongodb_host, username = mongodb_username, password = mongodb_password, port = mongodb_port, dbname = mongodb_dbname)
+
+		schema_conversion = SchemaConversion()
+		schema_conversion.set_config(schema_conv_init_option, schema_conv_output_option)
+		schema_conversion.run()
+
+		mysql2mongodb = DataConversion(schema_name)
+		mysql2mongodb.set_config(schema_conv_init_option, schema_conv_output_option, schema_conversion)
+		mysql2mongodb.run()
+
+		print("Done!")
+		return True
+
+	except Exception as e:
+		print(e)
+		print("Convert fail!")
 
 
 def convert_data(resource_id, sql_file_name, sql_file_url):
 	try:
-		pprint("Start conversion!")
+		print("Start conversion!")
 		if sql_file_name.split(".")[1] != "sql":
 			print("Invalided MySQL backup file extension!")
 			raise Exception()
@@ -69,14 +124,14 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 	          headers={"X-CKAN-API-Key": package_conf["X-CKAN-API-Key"]},
 	          files={'upload': open(f"{schema_name}.zip", 'rb')})
 
-		pprint(response.content)
+		print(response.content)
 
-		pprint("Done!")
+		print("Done!")
 		return True
 
 	except Exception as e:
-		pprint(e)
-		pprint("Convert fail!")
+		print(e)
+		print("Convert fail!")
 
 def read_package_config(file_url = "package_config.txt"):
 	try:
@@ -97,8 +152,8 @@ def read_package_config(file_url = "package_config.txt"):
 
 
 	except Exception as e:
-		pprint(e)
-		pprint("Failed while read package config!")
+		print(e)
+		print("Failed while read package config!")
 
 def read_database_config():
 	try:
@@ -145,3 +200,6 @@ def read_database_config():
 	except Exception as e:
 		print(e)
 		print("Failed while reading database config!")
+
+if __name__ == '__main__':
+	test()
