@@ -1,8 +1,8 @@
 import sys, json, bson, re, time, os
-# from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
-# from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql, open_connection_mongodb, import_json_to_mongodb, extract_dict, store_json_to_mongodb, load_mongodb_collection
-from schema_conversion import SchemaConversion
-from utilities import open_connection_mysql, open_connection_mongodb, import_json_to_mongodb, extract_dict, store_json_to_mongodb, load_mongodb_collection
+from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
+from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql, open_connection_mongodb, import_json_to_mongodb, extract_dict, store_json_to_mongodb, load_mongodb_collection
+# from schema_conversion import SchemaConversion
+# from utilities import open_connection_mysql, open_connection_mongodb, import_json_to_mongodb, extract_dict, store_json_to_mongodb, load_mongodb_collection
 from bson.decimal128 import Decimal128
 from decimal import Decimal
 from bson import BSON

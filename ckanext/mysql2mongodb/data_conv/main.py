@@ -1,11 +1,11 @@
-# from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
-# from ckanext.mysql2mongodb.data_conv.database_connection import ConvInitOption, ConvOutputOption
-# from ckanext.mysql2mongodb.data_conv.data_conversion import DataConversion
-# from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql
-from schema_conversion import SchemaConversion
-from database_connection import ConvInitOption, ConvOutputOption
-from data_conversion import DataConversion
-from utilities import open_connection_mysql
+from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
+from ckanext.mysql2mongodb.data_conv.database_connection import ConvInitOption, ConvOutputOption
+from ckanext.mysql2mongodb.data_conv.data_conversion import DataConversion
+from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql
+# from schema_conversion import SchemaConversion
+# from database_connection import ConvInitOption, ConvOutputOption
+# from data_conversion import DataConversion
+# from utilities import open_connection_mysql
 import urllib, json, re, os, requests
 
 def test():
