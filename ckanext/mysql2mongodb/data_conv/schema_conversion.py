@@ -1,7 +1,7 @@
 import json, os, re
-# from collections import OrderedDict
+from collections import OrderedDict
 from ckanext.mysql2mongodb.data_conv.utilities import extract_dict, import_json_to_mongodb, open_connection_mongodb, open_connection_mysql, drop_mongodb_database, load_mongodb_collection, store_json_to_mongodb
-from utilities import extract_dict, import_json_to_mongodb, open_connection_mongodb, open_connection_mysql, drop_mongodb_database, load_mongodb_collection, store_json_to_mongodb
+# from utilities import extract_dict, import_json_to_mongodb, open_connection_mongodb, open_connection_mysql, drop_mongodb_database, load_mongodb_collection, store_json_to_mongodb
 	
 class SchemaConversion:
 	"""
