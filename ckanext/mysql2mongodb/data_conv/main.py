@@ -77,6 +77,7 @@ def convert_data(dataset_title, resource_id, sql_file_name, sql_file_url):
 		True: Convert successfully
 	"""
 	try:
+		os.chdir("/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv")
 		package_conf = read_package_config()
 
 		# Check if dataset is not the one which converted databases are upload to.
@@ -86,7 +87,6 @@ def convert_data(dataset_title, resource_id, sql_file_name, sql_file_url):
 				print("Invalided MySQL backup file extension!")
 				raise Exception()
 			else:
-				os.chdir("/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv")
 				os.system(f"mkdir -p ./downloads/{resource_id}")
 				os.system(f"mkdir -p ./blob_and_text_file/{resource_id}")
 				os.system(f"mkdir -p ./conversion_log/{resource_id}")
@@ -101,7 +101,7 @@ def convert_data(dataset_title, resource_id, sql_file_name, sql_file_url):
 				mysql_port = db_conf["mysql_port"]
 				mysql_dbname = schema_name
 				
-				mysql_conn = open_connection_mysql(mysql_host, mysql_username, mysql_password)
+				mysql_conn = open_connection_mysql([mysql_host, mysql_username, mysql_password])
 				mysql_cur = mysql_conn.cursor()
 				mysql_cur.execute(f"CREATE DATABASE IF NOT EXISTS {mysql_dbname};")
 				mysql_cur.close()
@@ -148,7 +148,7 @@ def convert_data(dataset_title, resource_id, sql_file_name, sql_file_url):
 		print(e)
 		print("CKAN convert fail!")
 
-def read_package_config(file_url = "package_config.txt"):
+def read_package_config():
 	"""
 	Read package configuration file to get information of destination dataset which contain converted database files.
 	Return:
@@ -159,6 +159,7 @@ def read_package_config(file_url = "package_config.txt"):
 	"""
 	try:
 		package_conf = {}
+		file_url = "package_config.txt"
 		with open(file_url, "r") as f:
 			lines = f.readlines()
 		config_string_list = ["package_id", "X-CKAN-API-Key"]
