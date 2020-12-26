@@ -1,0 +1,6 @@
+blob_and_text_file
+downloads
+__pycache__
+conversion_log
+intermediate_data
+mongodump_files
