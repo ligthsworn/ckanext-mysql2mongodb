@@ -1,17 +1,23 @@
 import ckan.plugins as plugins
 import ckan.plugins.toolkit as toolkit
-from ckanext.mysql2mongodb.data_conv.main import convert_data
+from ckanext.mysql2mongodb.data_conv.main import data_conv
 import pprint, os
 
 class Mysql2MongodbPlugin(plugins.SingletonPlugin):
     plugins.implements(plugins.IResourceController)
 
     def after_create(self, context, resource):
-        dataset_title = context["package"].title
+        # pprint.pprint(context)
+        # pprint.pprint(resource)
+        os.system("pwd")
+        os.system("whoami")
         sql_file_name = resource["name"]
         sql_file_url = resource["url"]
         resource_id = resource["id"]
-        toolkit.enqueue_job(convert_data, [dataset_title, resource_id, sql_file_name, sql_file_url])
+        pprint.pprint(f"{resource_id}")
+        pprint.pprint(f"{sql_file_name}") 
+        pprint.pprint(f"{sql_file_url}")
+        toolkit.enqueue_job(data_conv, [resource_id, sql_file_name, sql_file_url])
 
     def before_create(self, context, resource):
     	pass

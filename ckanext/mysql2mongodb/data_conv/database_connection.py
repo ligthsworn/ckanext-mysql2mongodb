@@ -14,12 +14,6 @@ class ConvInitOption:
 		# self.dbtype = dbtype = "MySQL"
 		self.dbname = dbname
 
-	def get_mysql_connection_list(self):
-		"""
-		Get MySQL connection info list to set up connection string.
-		"""
-		return [self.host, self.username, self.password]
-
 class ConvOutputOption:
 	"""
 	Class Conversion Output Connection Option.
@@ -32,11 +26,5 @@ class ConvOutputOption:
 		self.password = password
 		self.port = port
 		# self.dbtype = dbtype = "MongoDB"
-		self.dbname = dbname
-
-	def get_mongodb_connection_list(self):
-		"""
-		Get MongoDB connection info list to set up connection string.
-		"""
-		return [self.host, self.username, self.password, self.port, self.dbname]		
+		self.dbname = dbname		
 		

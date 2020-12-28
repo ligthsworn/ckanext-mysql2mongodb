@@ -1,7 +1,0 @@
-
-        [ckan.plugins]
-        mysql2mongodb=ckanext.mysql2mongodb.plugin:Mysql2MongodbPlugin
-
-        [babel.extractors]
-        ckan = ckan.lib.extract:extract_ckan
-    
