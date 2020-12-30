@@ -7,7 +7,7 @@ from airflow.utils import dates
 from pprint import pprint
 import urllib, json, re, os, requests
 
-from helper import read_package_config, read_database_config
+from ckanext.mysql2mongodb.data_conv.dag.helper import read_package_config, read_database_config
 
 
 logging.basicConfig(format="%(name)s-%(levelname)s-%(asctime)s-%(message)s", level=logging.INFO)
