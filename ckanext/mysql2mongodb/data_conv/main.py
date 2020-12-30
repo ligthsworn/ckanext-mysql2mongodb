@@ -8,6 +8,7 @@ from dag.flow import create_dag
 
 def convert_data(resource_id, sql_file_name, sql_file_url):
 	try:
+		pprint("Nguyen Xuan Thanh dang o day!")
 		create_dag("flow", resource_id, sql_file_name, sql_file_url)
 		return True
 
