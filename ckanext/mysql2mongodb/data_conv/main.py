@@ -4,7 +4,7 @@ from ckanext.mysql2mongodb.data_conv.data_conversion import DataConversion
 from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql
 import urllib, json, re, os, requests
 from pprint import pprint
-from dag.flow import create_dag
+from ckanext.mysql2mongodb.data_conv.dag.flow import create_dag
 
 def convert_data(resource_id, sql_file_name, sql_file_url):
 	try:
