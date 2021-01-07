@@ -36,6 +36,8 @@ def create_dag(dag_id, resource_id, sql_file_name, sql_file_url):
         schedule_interval=timedelta(minutes=5),
     )
 
+    pprint("this shit should work")
+
     def taskPrepare(resource_id, sql_file_name, sql_file_url):
         pprint("Start conversion!")
         if sql_file_name.split(".")[1] != "sql":
@@ -100,6 +102,7 @@ def create_dag(dag_id, resource_id, sql_file_name, sql_file_url):
 
         pprint("Done!")
 
+    pprint("O nao???")
     with new_dag:
         task1 = PythonOperator(task_id='taskPrepare',
                                                 python_callable=taskPrepare,
@@ -141,5 +144,7 @@ def create_dag(dag_id, resource_id, sql_file_name, sql_file_url):
         task2.set_upstream(task1)
         task3.set_upstream(task2)
         task4.set_upstream(task3)
+
+        pprint("len duog")
 
         return new_dag

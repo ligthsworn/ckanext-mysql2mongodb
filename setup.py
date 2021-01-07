@@ -86,7 +86,7 @@ setup(
     # pip to create the appropriate form of executable for the target platform.
     entry_points='''
         [ckan.plugins]
-        mysql2mongodb=ckanext.mysql2mongodb.plugin:Mysql2MongodbPlugin
+        ckanext-mysql2mongodb=ckanext.mysql2mongodb.plugin:Mysql2MongodbPlugin
 
         [babel.extractors]
         ckan = ckan.lib.extract:extract_ckan

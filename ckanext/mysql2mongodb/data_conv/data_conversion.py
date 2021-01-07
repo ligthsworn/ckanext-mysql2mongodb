@@ -7,8 +7,9 @@ from bson import BSON
 from datetime import datetime
 from multiprocessing import Pool
 from itertools import repeat
-	
-class DataConversion:
+from ckanext.mysql2mongodb.data_conv.interfaces.AbstractDataConversion import AbstractDataConversion
+
+class DataConversion (AbstractDataConversion):
 	"""
 	DataConversion Database data class.
 	This class is used for:
