@@ -76,7 +76,7 @@ class SchemaConversion:
 		"""
 		command_create_intermediate_dir = f"mkdir -p ./intermediate_data/{self.schema_conv_init_option.dbname}"
 		os.system(command_create_intermediate_dir)
-		command = f"schemacrawler.sh \
+		command = f"./_schemacrawler/schemacrawler.sh \
 		--server=mysql \
 		--host={self.schema_conv_init_option.host} \
 		--port={self.schema_conv_init_option.port} \

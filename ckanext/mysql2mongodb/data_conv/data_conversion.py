@@ -1,4 +1,8 @@
-import sys, json, bson, re, time
+import sys
+import json
+import bson
+import re
+import time
 from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
 from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql, open_connection_mongodb, import_json_to_mongodb, extract_dict, store_json_to_mongodb, load_mongodb_collection
 from bson.decimal128 import Decimal128
@@ -8,6 +12,8 @@ from datetime import datetime
 from multiprocessing import Pool
 from itertools import repeat
 from ckanext.mysql2mongodb.data_conv.interfaces.AbstractDataConversion import AbstractDataConversion
+import pprint
+
 
 class DataConversion (AbstractDataConversion):
 	"""
@@ -16,6 +22,7 @@ class DataConversion (AbstractDataConversion):
 		- Converting and migrating data from MySQL to MongoDB.
 		- Validating if converting is correct, using re-converting method.
 	"""
+
 	def __init__(self):
 		super(DataConversion, self).__init__()
 
@@ -27,7 +34,7 @@ class DataConversion (AbstractDataConversion):
 			- schema: MySQL schema object which was loaded from MongoDB.
 		"""
 		self.schema = schema
-		#set config
+		# set config
 		self.schema_conv_init_option = schema_conv_init_option
 		self.schema_conv_output_option = schema_conv_output_option
 		self.validated_dbname = self.schema_conv_init_option.dbname + "_validated"
@@ -40,7 +47,7 @@ class DataConversion (AbstractDataConversion):
 		tic = time.time()
 		self.migrate_mysql_to_mongodb()
 		toc = time.time()
-		time_taken=round((toc-tic)*1000, 1)
+		time_taken = round((toc-tic)*1000, 1)
 		print(f"Time for migrating MySQL to MongoDB: {time_taken}")
 		self.validate()
 		self.convert_relations_to_references()
@@ -55,13 +62,12 @@ class DataConversion (AbstractDataConversion):
 			3.2 Define columns of each tables
 			3.3 Deinfe constraint
 		4 Import data to MySQL
-		5 Evaluate 
+		5 Evaluate
 		"""
 
 		mysql_connection = self.create_validated_database()
 
 		self.create_validated_tables(mysql_connection)
-		
 
 		# return
 
@@ -79,7 +85,6 @@ class DataConversion (AbstractDataConversion):
 		if mysql_connection.is_connected():
 			mysql_connection.close()
 			print("Disconnected to MySQL Server version ", mysql_connection.get_server_info())
-
 
 		self.evaluate_validating()
 
@@ -101,11 +106,11 @@ class DataConversion (AbstractDataConversion):
 
 		if self.validated_dbname in mysql_table_list:
 			mycursor.execute(f"DROP DATABASE {self.validated_dbname}")
-		
+
 		# print("DROPPPPPPPPPPPPPPPPPPPPPPPPPPPP")
 		# print(self.validated_dbname)
 		# print(mysql_table_list)
-		
+
 		mycursor.execute(f"CREATE DATABASE {self.validated_dbname}")
 		mycursor.close()
 		mydb.close()
@@ -114,12 +119,11 @@ class DataConversion (AbstractDataConversion):
 		print("Create validated table successfully!")
 		return mydb
 
-
 	def get_tables_creating_info(self):
 		"""
 		*Get tables only, not views
 		Dict(
-			key: <table uuid>, 
+			key: <table uuid>,
 			value: Dict(
 				key: "schema", value: <table name>,
 				key: "name", value: <table name>,
@@ -153,7 +157,7 @@ class DataConversion (AbstractDataConversion):
 		db_schema = self.schema.get()
 		columns_info_list = []
 		for column_schema in db_schema["all-table-columns"]:
-			table_name= column_schema["short-name"].split(".")[0]
+			table_name = column_schema["short-name"].split(".")[0]
 			column_info = {
 				"uuid": column_schema["@uuid"],
 				"column-name": column_schema["name"],
@@ -169,7 +173,6 @@ class DataConversion (AbstractDataConversion):
 			}
 			columns_info_list.append(column_info)
 		return columns_info_list
-
 
 	def get_column_default_value(self, column_schema):
 		# print(prefix_suffix_col_dtype_list)
@@ -195,7 +198,7 @@ class DataConversion (AbstractDataConversion):
 	def get_prefix_suffix_column_data_types_list(self):
 		db_schema = self.schema.get()
 		# Get prefix and suffix of default value
-		## Get all column-data-type which have prefix and suffix
+		# Get all column-data-type which have prefix and suffix
 		column_data_types_list = []
 		for column_schema in db_schema["all-table-columns"]:
 			if type(column_schema["column-data-type"]) is dict:
@@ -212,13 +215,11 @@ class DataConversion (AbstractDataConversion):
 				if prefix is not None and suffix is not None:
 					prefix_suffix_info = {
 						"uuid": column_schema["column-data-type"]["@uuid"],
-						"prefix": column_schema["column-data-type"]["literal-prefix"], 
-						"suffix": column_schema["column-data-type"]["literal-suffix"] 
+						"prefix": column_schema["column-data-type"]["literal-prefix"],
+						"suffix": column_schema["column-data-type"]["literal-suffix"]
 					}
 					column_data_types_list.append(prefix_suffix_info)
 		return column_data_types_list
-
-		
 
 	def create_validated_tables(self, mysql_connection):
 		db_schema = self.schema.get()
@@ -228,34 +229,39 @@ class DataConversion (AbstractDataConversion):
 		# for table_info in table_info_list:
 			# self.alter_one_table(mysql_connection, table_info)
 
-
 	def create_one_table(self, mysql_connection, table_info):
-		columns_info_list = list(filter(lambda column_info: column_info["uuid"] in table_info["columns-uuid-list"], self.get_columns_info()))
-		primary_key_info = list(filter(lambda index_info: index_info["uuid"] == table_info["primary-key-uuid"], self.get_primary_indexes_info_list()))[0] 
+		try:
+			columns_info_list = list(filter(
+				lambda column_info: column_info["uuid"] in table_info["columns-uuid-list"], self.get_columns_info()))
+			primary_key_info = list(filter(
+				lambda index_info: index_info["uuid"] == table_info["primary-key-uuid"], self.get_primary_indexes_info_list()))[0]
 
-		#sql create column
-		sql_creating_columns_cmd = ",\n".join([self.generate_sql_creating_column(column_info) for column_info in columns_info_list])
-		#sql create primary key
-		sql_creating_key_cmd = self.generate_sql_creating_key(primary_key_info)
+			# sql create column
+			sql_creating_columns_cmd = ",\n".join(
+				[self.generate_sql_creating_column(column_info) for column_info in columns_info_list])
+			# sql create primary key
+			sql_creating_key_cmd = self.generate_sql_creating_key(primary_key_info)
 
-		sql_creating_columns_and_key_cmd = sql_creating_columns_cmd + ",\n" + sql_creating_key_cmd 
-		#sql create table
-		sql_creating_table_cmd = f"""CREATE TABLE {table_info["table-name"]} (\n{sql_creating_columns_and_key_cmd}\n) ENGINE={table_info["engine"]}"""# DEFAULT CHARSET={table_info["table-collation"]};"""
-		# print(sql_creating_table_cmd)
-		
-		# create table
-		# if table_info["table-name"] == "staff":
-		# print(sql_creating_table_cmd)
-		mycursor = mysql_connection.cursor()
-		mycursor.execute(sql_creating_table_cmd)
-		mycursor.close()
+			sql_creating_columns_and_key_cmd = sql_creating_columns_cmd + ",\n" + sql_creating_key_cmd
+			# sql create table
+			sql_creating_table_cmd = f"""CREATE TABLE `{table_info["table-name"]}` (\n{sql_creating_columns_and_key_cmd}\n) ENGINE={table_info["engine"]}"""  # DEFAULT CHARSET={table_info["table-collation"]};"""
+			# print(sql_creating_table_cmd)
+
+			# create table
+			# if table_info["table-name"] == "staff":
+			# print(sql_creating_table_cmd)
+			mycursor = mysql_connection.cursor()
+			mycursor.execute(sql_creating_table_cmd)
+			mycursor.close()
+		except Exception as e:
+			raise Exception(sql_creating_table_cmd)
 
 	def alter_one_table(self, mysql_connection, table_info):
 		"""
 		Add foreign key constraints
 		"""
 		fk_constraints_list = self.get_table_constraint_info_list(table_info["uuid"])
-		# sql creating constraint 
+		# sql creating constraint
 		sql_creating_fk_cmd = ",\n".join(self.generate_sql_foreign_keys_list(fk_constraints_list))
 		if len(sql_creating_fk_cmd) > 0:
 			sql_altering_table_cmd = f"""ALTER TABLE {table_info["table-name"]} {sql_creating_fk_cmd};"""
@@ -298,7 +304,7 @@ class DataConversion (AbstractDataConversion):
 		if column_info["auto-incremented"] is True:
 			sql_cmd_list.append("AUTO_INCREMENT")
 			# CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
-		
+
 		# if column_info["character-set-name"] is not None:
 		# 	sql_cmd_list.append(f"""CHARACTER SET {column_info["character-set-name"]}""")
 		# if column_info["collation-name"] is not None:
@@ -318,7 +324,8 @@ class DataConversion (AbstractDataConversion):
 			)
 		"""
 		coluuid_colname_dict = self.schema.get_columns_dict()
-		columns_in_pk_list = [coluuid_colname_dict[col_uuid] for col_uuid in primary_key_info["columns-uuid-list"]]
+		columns_in_pk_list = [coluuid_colname_dict[col_uuid]
+		    for col_uuid in primary_key_info["columns-uuid-list"]]
 		sql_creating_key = f"""PRIMARY KEY ({", ".join(columns_in_pk_list)})"""
 		return sql_creating_key
 
@@ -345,7 +352,8 @@ class DataConversion (AbstractDataConversion):
 			fk_col = coluuid_colname_dict[col_ref["fk-uuid"]]
 			pk_col = coluuid_colname_dict[col_ref["pk-uuid"]]
 			pk_tabl = coluuid_tablename_dict[col_ref["pk-uuid"]]
-			sql_fk_cmd_list.append(f"""ADD CONSTRAINT {fk_info["name"]} FOREIGN KEY ({fk_col}) REFERENCES {pk_tabl} ({pk_col}) ON DELETE {fk_info["delete-rule"]} ON UPDATE {fk_info["update-rule"]}""")
+			sql_fk_cmd_list.append(
+			    f"""ADD CONSTRAINT {fk_info["name"]} FOREIGN KEY ({fk_col}) REFERENCES {pk_tabl} ({pk_col}) ON DELETE {fk_info["delete-rule"]} ON UPDATE {fk_info["update-rule"]}""")
 		return sql_fk_cmd_list
 
 	def parse_mysql_data_type(self, dtype, width):
@@ -356,52 +364,52 @@ class DataConversion (AbstractDataConversion):
 			-width: length of column
 		"""
 		mysql_type_list = [
-			"ascii", 
+			"ascii",
 			"bigint",
-			"binary", 
-			"bit", 
-			"blob", 
+			"binary",
+			"bit",
+			"blob",
 			"boolean",
-			"bool", 
-			"character", 
-			"charset", 
-			"char", 
-			"datetime", 
-			"date", 
-			"decimal", 
-			"dec", 
-			"double", 
-			"enum", 
+			"bool",
+			"character",
+			"charset",
+			"char",
+			"datetime",
+			"date",
+			"decimal",
+			"dec",
+			"double",
+			"enum",
 			"fixed",
-			"float", 
+			"float",
 			"geometrycollection",
-			"geometry", 
-			"integer", 
-			"int", 
+			"geometry",
+			"integer",
+			"int",
 			"json"
-			"linestring", 
+			"linestring",
 			"longblob",
 			"longtext",
-			"mediumblob", 
-			"mediumint", 
-			"mediumtext", 
-			"multilinestring", 
-			"multipoint", 
-			"multipolygon", 
-			"point", 
+			"mediumblob",
+			"mediumint",
+			"mediumtext",
+			"multilinestring",
+			"multipoint",
+			"multipolygon",
+			"point",
 			"polygon",
 			"real",
 			"set",
-			"smallint", 
-			"text", 
-			"timestamp", 
+			"smallint",
+			"text",
+			"timestamp",
 			"time",
-			"tinyblob", 
-			"tinyint", 
-			"tinytext", 
-			"unicode", 
+			"tinyblob",
+			"tinyint",
+			"tinytext",
+			"unicode",
 			"varbinary",
-			"varchar", 
+			"varchar",
 			"year",
 		]
 		for mysql_type in mysql_type_list:
@@ -475,7 +483,7 @@ class DataConversion (AbstractDataConversion):
 
 	def get_primary_indexes_info_list(self):
 		"""
-		Get only index on primary keys of tables. 
+		Get only index on primary keys of tables.
 		Use for defining primary key when creating table.
 		Index info:
 			Dict(
@@ -508,10 +516,14 @@ class DataConversion (AbstractDataConversion):
 		table_constraints_info = []
 		foreign_key_list = self.get_foreign_keys_list()
 		db_schema = self.schema.get()
-		table_schema = list(filter(lambda table_schema: table_schema["@uuid"] == table_uuid, db_schema["catalog"]["tables"]))[0]
-		table_constraints_list = list(filter(lambda tbl_constr: type(tbl_constr) is dict, table_schema["table-constraints"]))
-		table_constraint_name_list = list(map(lambda tbl_constr: tbl_constr["name"], table_constraints_list))
-		res = list(filter(lambda fk_info: fk_info["name"] in table_constraint_name_list, foreign_key_list))
+		table_schema = list(
+		    filter(lambda table_schema: table_schema["@uuid"] == table_uuid, db_schema["catalog"]["tables"]))[0]
+		table_constraints_list = list(filter(lambda tbl_constr: type(
+		    tbl_constr) is dict, table_schema["table-constraints"]))
+		table_constraint_name_list = list(
+		    map(lambda tbl_constr: tbl_constr["name"], table_constraints_list))
+		res = list(filter(lambda fk_info: fk_info["name"]
+		           in table_constraint_name_list, foreign_key_list))
 		return res
 
 	def get_foreign_keys_list(self):
@@ -601,7 +613,6 @@ class DataConversion (AbstractDataConversion):
 		mycursor.execute(sql_create_trigger)
 		mycursor.close()
 
-
 	def migrate_mongodb_to_mysql(self, mysql_connection):
 		"""
 		Migrate data from MongoDB back to MySQL
@@ -614,54 +625,58 @@ class DataConversion (AbstractDataConversion):
 		"""
 		Migrate one collection from MongoDB back to MySQL
 		"""
-		datas = load_mongodb_collection(
-			self.schema_conv_output_option.host, 
-			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname, 
-			collection_name
-		)
-		db_schema = self.schema.get()
-		col_dict = self.schema.get_columns_dict()
-		table_coluuid_list = list(filter(lambda table_schema: table_schema["name"] == collection_name, db_schema["catalog"]["tables"]))[0]["columns"]
-		columns_name_list = [col_dict[col_uuid] for col_uuid in table_coluuid_list]
-		columns_num = len(columns_name_list)
+		try:
+			datas = load_mongodb_collection(
+				self.schema_conv_output_option.host,
+				self.schema_conv_output_option.port,
+				self.schema_conv_output_option.dbname,
+				collection_name
+			)
+			db_schema = self.schema.get()
+			col_dict = self.schema.get_columns_dict()
+			table_coluuid_list = list(filter(
+				lambda table_schema: table_schema["name"] == collection_name, db_schema["catalog"]["tables"]))[0]["columns"]
+			columns_name_list = [col_dict[col_uuid] for col_uuid in table_coluuid_list]
+			columns_num = len(columns_name_list)
 
-		columns_name_sql = ["%s"] * columns_num
-		cols_info = list(filter(lambda col_inf: col_inf["table-name"] == collection_name, self.get_columns_info()))
-		for i in range(len(columns_name_sql)):
-			for col_info in cols_info:
-				if col_info["column-name"] == columns_name_list[i]:
-					if col_info["column-type"][:8] == "geometry":
-						columns_name_sql[i] = f"ST_GeomFromText({columns_name_sql[i]})"
-						break
+			columns_name_sql = ["%s"] * columns_num
+			cols_info = list(
+				filter(lambda col_inf: col_inf["table-name"] == collection_name, self.get_columns_info()))
+			for i in range(len(columns_name_sql)):
+				for col_info in cols_info:
+					if col_info["column-name"] == columns_name_list[i]:
+						if col_info["column-type"][:8] == "geometry":
+							columns_name_sql[i] = f"ST_GeomFromText({columns_name_sql[i]})"
+							break
 
-		mycursor = mysql_connection.cursor()
-		sql = f"""INSERT IGNORE INTO {collection_name} ({", ".join(columns_name_list)}) VALUES ({", ".join(columns_name_sql)})"""
-		# val = [[data[key] for key in columns_name_list] for data in datas]
-		val = []
-		for data in datas:
-			row = []
-			for key in columns_name_list:
-				if key in data.keys():
-					dtype = type(data[key])
-					if dtype is Decimal128:
-						cell_data = data[key].to_decimal()
-					elif dtype is list:
-						# return
-						cell_data = ",".join(data[key])
-					elif dtype is dict:
-						print(data[key])
-						return
+			mycursor = mysql_connection.cursor()
+			sql = f"""INSERT IGNORE INTO `{collection_name}` ({", ".join(columns_name_list)}) VALUES ({", ".join(columns_name_sql)})"""
+			# val = [[data[key] for key in columns_name_list] for data in datas]
+			val = []
+			for data in datas:
+				row = []
+				for key in columns_name_list:
+					if key in data.keys():
+						dtype = type(data[key])
+						if dtype is Decimal128:
+							cell_data = data[key].to_decimal()
+						elif dtype is list:
+							# return
+							cell_data = ",".join(data[key])
+						elif dtype is dict:
+							print(data[key])
+							return
+						else:
+							cell_data = data[key]
 					else:
-						cell_data = data[key]
-				else:
-					cell_data = None
-				row.append(cell_data)
-			val.append(row)
-		mycursor.executemany(sql, val)
-		mysql_connection.commit()
-		print("Insert done!")		
-
+						cell_data = None
+					row.append(cell_data)
+				val.append(row)
+			mycursor.executemany(sql, val)
+			mysql_connection.commit()
+			print("Insert done!")
+		except Exception as e:
+			raise Exception(sql)
 
 	# def specify_sequence_of_migrating_tables(self):
 	# 	"""
@@ -689,7 +704,7 @@ class DataConversion (AbstractDataConversion):
 	# 	# return
 	# 	# print(node_seq)
 	# 	current_mark = 0
-	# 	lowest_nodes_set = root_nodes 
+	# 	lowest_nodes_set = root_nodes
 	# 	current_rels = list(filter(lambda rel: rel["primary_key_table"] in lowest_nodes_set, tables_relations_list))
 	# 	print(lowest_nodes_set)
 	# 	while len(current_rels) > 0:
@@ -704,7 +719,6 @@ class DataConversion (AbstractDataConversion):
 	# 		# print(len(current_rels))
 	# 	return
 
-
 		# def update_seq_list(seq_list, pk_table, fk_table):
 		# 	if pk_table in seq_list:
 		# 		pk_idx = seq_list.index(pk_table)
@@ -712,12 +726,12 @@ class DataConversion (AbstractDataConversion):
 		# 			fk_idx = seq_list.index(fk_table)
 		# 			if pk_idx > fk_idx:
 		# 				seq_list = swap_seq_list(seq_list, fk_idx, pk_idx)
-		# 				seq_list = seq_list[:fk_idx] + seq_list[fk_idx+1:pk_idx+1] + [fk_table] + seq_list[pk_idx+1:] 
-		# 		else: 
+		# 				seq_list = seq_list[:fk_idx] + seq_list[fk_idx+1:pk_idx+1] + [fk_table] + seq_list[pk_idx+1:]
+		# 		else:
 		# 			seq_list = seq_list[:pk_idx+1] + [fk_table] + seq_list[pk_idx+1:]
 		# 	else:
 		# 		if fk_table in seq_list:
-		# 			fk_idx = seq_list.index(fk_table)	
+		# 			fk_idx = seq_list.index(fk_table)
 		# 			seq_list = seq_list[:fk_idx] + [pk_table] + seq_list[fk_idx+1:]
 		# 		else:
 		# 			seq_list = seq_list + [pk_table, fk_table]
@@ -741,46 +755,44 @@ class DataConversion (AbstractDataConversion):
 		# 	current_mark = current_mark + 1
 		# print(node_seq)
 
-		# table_seq = {} 
+		# table_seq = {}
 		# for i in range(current_mark):
 		# 	table_seq[str(i)] = []
 		# 	for key in list(node_seq):
 		# 		if node_seq[key] == i:
 		# 			table_seq[str(i)] = table_seq[str(i)] + [key]
-		# return table_seq 
+		# return table_seq
 
 	def evaluate_validating(self):
 		ori_conn = open_connection_mysql(
-			self.schema_conv_init_option.host, 
-			self.schema_conv_init_option.username, 
+			self.schema_conv_init_option.host,
+			self.schema_conv_init_option.username,
 			self.schema_conv_init_option.password,
 			self.schema_conv_init_option.dbname
 			)
 		ori_cur = ori_conn.cursor()
 
 		val_conn = open_connection_mysql(
-			self.schema_conv_init_option.host, 
-			self.schema_conv_init_option.username, 
+			self.schema_conv_init_option.host,
+			self.schema_conv_init_option.username,
 			self.schema_conv_init_option.password,
 			self.validated_dbname
 			)
 		val_cur = val_conn.cursor()
 
 		mongodb_conn = open_connection_mongodb(
-			self.schema_conv_output_option.host, 
+			self.schema_conv_output_option.host,
 			self.schema_conv_output_option.port,
 			self.schema_conv_output_option.dbname)
 
 		for table in self.schema.get_tables_name_list():
-			mongo_count = mongodb_conn[table].count() 
-			sql = f"select count(*) from {table};"
+			mongo_count = mongodb_conn[table].count()
+			sql = f"select count(*) from `{table}`;"
 			ori_cur.execute(sql)
 			val_cur.execute(sql)
-			ori_data = ori_cur.fetchall()	
-			val_data = val_cur.fetchall()	
+			ori_data = ori_cur.fetchall()
+			val_data = val_cur.fetchall()
 			print(ori_data[0][0], mongo_count, val_data[0][0])
-
-
 
 	def find_converted_dtype(self, mysql_dtype):
 		"""
@@ -801,9 +813,10 @@ class DataConversion (AbstractDataConversion):
 			"single-geometry": "single-geometry",
 			"multiple-geometry": "multiple-geometry",
 		}
-		
+
 		dtype_dict = {}
-		dtype_dict[mongodb_dtype["integer"]] = ["TINYINT", "SMALLINT", "MEDIUMINT", "INT", "INTEGER", "BIGINT"]
+		dtype_dict[mongodb_dtype["integer"]] = ["TINYINT",
+		    "SMALLINT", "MEDIUMINT", "INT", "INTEGER", "BIGINT"]
 		dtype_dict[mongodb_dtype["decimal"]] = ["DECIMAL", "DEC", "FIXED"]
 		dtype_dict[mongodb_dtype["double"]] = ["FLOAT", "DOUBLE", "REAL"]
 		dtype_dict[mongodb_dtype["boolean"]] = ["BOOL", "BOOLEAN"]
@@ -811,15 +824,17 @@ class DataConversion (AbstractDataConversion):
 		dtype_dict[mongodb_dtype["timestamp"]] = ["DATETIME", "TIMESTAMP", "TIME"]
 		dtype_dict[mongodb_dtype["binary"]] = ["BIT", "BINARY", "VARBINARY"]
 		dtype_dict[mongodb_dtype["blob"]] = ["TINYBLOB", "BLOB", "MEDIUMBLOB", "LONGBLOB"]
-		dtype_dict[mongodb_dtype["string"]] = ["CHARACTER", "CHARSET", "ASCII", "UNICODE", "CHAR", "VARCHAR", "TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT"]
+		dtype_dict[mongodb_dtype["string"]] = ["CHARACTER", "CHARSET", "ASCII",
+		    "UNICODE", "CHAR", "VARCHAR", "TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT"]
 		dtype_dict[mongodb_dtype["object"]] = ["ENUM", "SET", "JSON"]
 		dtype_dict[mongodb_dtype["single-geometry"]] = ["GEOMETRY", "POINT", "LINESTRING", "POLYGON"]
-		dtype_dict[mongodb_dtype["multiple-geometry"]] = ["MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON", "GEOMETRYCOLLECTION"]
+		dtype_dict[mongodb_dtype["multiple-geometry"]] = ["MULTIPOINT",
+		    "MULTILINESTRING", "MULTIPOLYGON", "GEOMETRYCOLLECTION"]
 
 		for target_dtype in dtype_dict.keys():
 			if(mysql_dtype) in dtype_dict[target_dtype]:
 				return mongodb_dtype[target_dtype]
-		return None 
+		return None
 
 	def migrate_mysql_to_mongodb(self):
 		"""
@@ -833,25 +848,27 @@ class DataConversion (AbstractDataConversion):
 		# 	pool.close()
 		# 	pool.join()
 
-
-		
 	def migrate_one_table_to_collection(self, table_name):
-		fetched_data_list = self.get_fetched_data_list(table_name)
-		convert_data_list = self.store_fetched_data_to_mongodb(table_name, fetched_data_list)
-		mongodb_connection = open_connection_mongodb(
-			self.schema_conv_output_option.host, 
-			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname)
-		store_json_to_mongodb(mongodb_connection, table_name, convert_data_list)
-		
+		try:
+			fetched_data_list = self.get_fetched_data_list(table_name)
+			convert_data_list = self.store_fetched_data_to_mongodb(table_name, fetched_data_list)
+			mongodb_connection = open_connection_mongodb(
+				self.schema_conv_output_option.host,
+				self.schema_conv_output_option.port,
+				self.schema_conv_output_option.dbname)
+			store_json_to_mongodb(mongodb_connection, table_name, convert_data_list)
+		except Exception as e:
+			raise e
+
+
 	def get_fetched_data_list(self, table_name):
 		colname_coltype_dict = self.schema.get_table_column_and_data_type()[table_name]
 		try:
 			db_connection = open_connection_mysql(
-				self.schema_conv_init_option.host, 
-				self.schema_conv_init_option.username, 
-				self.schema_conv_init_option.password, 
-				self.schema_conv_init_option.dbname, 
+				self.schema_conv_init_option.host,
+				self.schema_conv_init_option.username,
+				self.schema_conv_init_option.password,
+				self.schema_conv_init_option.dbname,
 			)
 			if db_connection.is_connected():
 				# col_fetch_seq = []
@@ -868,21 +885,22 @@ class DataConversion (AbstractDataConversion):
 						sql_cmd = sql_cmd + " ST_AsText(" + col_name + "),"
 					else:
 						sql_cmd = sql_cmd + " `" + col_name + "`,"
-				#join sql
-				sql_cmd = sql_cmd[:-1] + " FROM " + table_name
+				# join sql
+				sql_cmd = sql_cmd[:-1] + " FROM " + "`" + table_name + "`"
+				
 				db_cursor = db_connection.cursor();
-				#execute sql
+				# execute sql
 				db_cursor.execute(sql_cmd)
-				#fetch data and convert
+				# fetch data and convert
 				fetched_data = db_cursor.fetchall()
 				db_cursor.close()
-				return fetched_data 
+				return fetched_data
 			else:
-				print("Connect fail!")
-		
+				raise Exception("Connect fail!")
+
 		except Exception as e:
-			print("Error while writing to MongoDB", e)
-		
+			raise e
+
 		finally:
 			if (db_connection.is_connected()):
 				db_connection.close()
@@ -895,7 +913,7 @@ class DataConversion (AbstractDataConversion):
 		"""
 		colname_coltype_dict = self.schema.get_table_column_and_data_type()[table_name]
 		rows = []
-		### Parallel start from here
+		# Parallel start from here
 		for row in fetched_data:
 			data = {}
 			col_fetch_seq = list(colname_coltype_dict.keys())
@@ -903,7 +921,7 @@ class DataConversion (AbstractDataConversion):
 				col = col_fetch_seq[i]
 				dtype = colname_coltype_dict[col]
 				target_dtype = self.find_converted_dtype(dtype)
-				#generate SQL
+				# generate SQL
 				cell_data = row[i]
 				if cell_data != None:
 					# if dtype == "GEOMETRY":
@@ -929,7 +947,7 @@ class DataConversion (AbstractDataConversion):
 						# return
 						converted_data = str(cell_data)
 					elif dtype == "BIT":
-						###get col type from schema attribute 
+						# get col type from schema attribute 
 						# mysql_col_type = self.schema.get_col_type_from_schema_attribute(table, col)
 						# if mysql_col_type == "tinyint(1)":
 						# 	binary_num = cell_data
@@ -959,10 +977,10 @@ class DataConversion (AbstractDataConversion):
 						converted_data = cell_data
 					data[col_fetch_seq[i]] = converted_data 
 			rows.append(data)
-		### Parallel end here
+		# Parallel end here
 
-		#assign to obj
-		#store to mongodb
+		# assign to obj
+		# store to mongodb
 		# print("Start migrating table ", table)
 		return rows
 

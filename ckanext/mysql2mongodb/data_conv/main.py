@@ -11,9 +11,9 @@ from ckanext.mysql2mongodb.data_conv.dag.flow import create_dag
 from datetime import date, datetime
 
 
-def convert_data(resource_id, sql_file_name, sql_file_url):
+def convert_data(resource_id, sql_file_name, sql_file_url, package_id):
 	try:
-		conf = buildConf(resource_id, sql_file_name, sql_file_url)
+		conf = buildConf(resource_id, sql_file_name, sql_file_url, package_id)
 		runConvert(conf)
 		return True
 
@@ -21,10 +21,11 @@ def convert_data(resource_id, sql_file_name, sql_file_url):
 		pprint(e)
 		pprint("Convert fail!")
 
-def buildConf(resource_id, sql_file_name, sql_file_url):
-	conf = dict(zip("resource_id",resource_id))
+def buildConf(resource_id, sql_file_name, sql_file_url, package_id):
+	conf = {"resource_id" : resource_id}
 	conf['sql_file_name'] = sql_file_name
 	conf['sql_file_url'] = sql_file_url
+	conf['package_id'] = package_id
 	return conf
 
 def runConvert(conf):

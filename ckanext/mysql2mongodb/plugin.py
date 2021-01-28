@@ -14,10 +14,14 @@ class Mysql2MongodbPlugin(plugins.SingletonPlugin):
         sql_file_name = resource["name"]
         sql_file_url = resource["url"]
         resource_id = resource["id"]
+        package_id = resource["package_id"]
+        # pprint.pprint(f"----------------------------------------------------------------------------------")
+        # pprint.pprint(f"{resource}")
+        # pprint.pprint(f"----------------------------------------------------------------------------------")
         pprint.pprint(f"{resource_id}")
         pprint.pprint(f"{sql_file_name}") 
         pprint.pprint(f"{sql_file_url}")
-        toolkit.enqueue_job(convert_data, [resource_id, sql_file_name, sql_file_url])
+        toolkit.enqueue_job(convert_data, [resource_id, sql_file_name, sql_file_url, package_id])
 
     def before_create(self, context, resource):
     	pass
