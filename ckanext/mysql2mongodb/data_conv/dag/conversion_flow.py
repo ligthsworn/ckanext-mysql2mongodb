@@ -1,3 +1,6 @@
+from .factory import getDatabaseFuntions
+from data_conv.core.database_function import DatabaseFunctionsOptions
+from .factory import getDatabaseFuntions
 import logging
 from datetime import datetime
 import os
@@ -55,15 +58,20 @@ def taskPrepare(**kwargs):
         mysql_dbname = schema_name
 
         # process mysql
-        mysql_conn = open_connection_mysql(
-            mysql_host, mysql_username, mysql_password)
-        mysql_cur = mysql_conn.cursor()
-        mysql_cur.execute(f"CREATE DATABASE IF NOT EXISTS {mysql_dbname};")
-        mysql_cur.close()
-        mysql_conn.close()
+        # mysql_conn = open_connection_mysql(
+        #     mysql_host, mysql_username, mysql_password)
+        # mysql_cur = mysql_conn.cursor()
+        # mysql_cur.execute(f"CREATE DATABASE IF NOT EXISTS {mysql_dbname};")
+        # mysql_cur.close()
+        # mysql_conn.close()
 
-        os.system(
-            f"mysql -h {mysql_host} -u {mysql_username} --password={mysql_password} {schema_name} < {LOCATION}/downloads/{resource_id}/{sql_file_name}")
+        # os.system(
+        #     f"mysql -h {mysql_host} -u {mysql_username} --password={mysql_password} {schema_name} < {LOCATION}/downloads/{resource_id}/{sql_file_name}")
+
+        source_database_funtions = getDatabaseFuntions(type="MYSQL", options=DatabaseFunctionsOptions(
+            host=mysql_host, username=mysql_username, password=mysql_password, port=mysql_port, dbname=mysql_dbname))
+
+        source_database_funtions.restore(f"./downloads/{sql_file_name}")
 
         push_to_xcom(kwargs, resource_id, sql_file_name, sql_file_url, db_conf, package_conf, CKAN_API_KEY,
                      schema_name, mysql_host, mysql_username, mysql_password, mysql_port, mysql_dbname)
@@ -144,10 +152,18 @@ def taskDataConv(**kwargs):
         mysql2mongodb.run()
 
         os.system(f"mkdir -p mongodump_files")
-        os.system(
-            f"mongodump --username {mongodb_username} --password {mongodb_password} --host {mongodb_host} --port {mongodb_port} --authenticationDatabase admin --db {mongodb_dbname} --forceTableScan -o mongodump_files/")
+        # os.system(
+        #     f"mongodump --username {mongodb_username} --password {mongodb_password} --host {mongodb_host} --port {mongodb_port} --authenticationDatabase admin --db {mongodb_dbname} --forceTableScan -o mongodump_files/")
+        # os.chdir("./mongodump_files")
+        # os.system(f"zip -r {schema_name}.zip {schema_name}/*")
+
+        destination_database_funtions = getDatabaseFuntions(type="MONGO", options=DatabaseFunctionsOptions(
+            host=mongodb_host, username=mongodb_username, password=mongodb_password, port=mongodb_port, dbname=mongodb_dbname))
+
+        destination_database_funtions.backup(f"./mongodump_files/{schema_name}")
         os.chdir("./mongodump_files")
         os.system(f"zip -r {schema_name}.zip {schema_name}/*")
+
 
         kwargs['ti'].xcom_push(key='schema_conv_init_option',
                                value=jsonpickle.encode(schema_conv_init_option))
