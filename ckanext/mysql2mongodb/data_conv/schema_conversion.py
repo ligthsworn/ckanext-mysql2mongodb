@@ -50,7 +50,7 @@ class SchemaConversion:
 		"""
 		Save MySQL schema which was generate by SchemaCrawler to MongoDB database
 		"""
-		db_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname) 
+		db_connection = open_connection_mongodb(self.schema_conv_output_option) 
 		# print("Ready 		
 		import_json_to_mongodb(db_connection, collection_name="schema", dbname=self.schema_conv_output_option.dbname, json_filename=self.schema_filename)
 		print(f"Save schema from {self.schema_conv_output_option.dbname} database to MongoDB successfully!")
@@ -63,7 +63,7 @@ class SchemaConversion:
 		*Need to be edited for loading from MongoDB instead.
 		"""
 		if not hasattr(self, "db_schema"):
-			db_schema = load_mongodb_collection(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname, "schema")
+			db_schema = load_mongodb_collection(self.schema_conv_output_option, "schema")
 			self.db_schema = db_schema[0]
 			# Most used variable
 			self.all_table_columns = self.db_schema["all-table-columns"]
@@ -97,14 +97,11 @@ class SchemaConversion:
 		Drop a MongoDB database.
 		For development only.
 		"""
-		drop_mongodb_database(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname)
+		drop_mongodb_database(self.schema_conv_output_option)
 
 	def drop_view(self):
 		mongodb_connection = open_connection_mongodb(
-			self.schema_conv_output_option.host, 
-			self.schema_conv_output_option.port, 
-			self.schema_conv_output_option.dbname
-			)
+			self.schema_conv_output_option)
 		view_set = set(self.get_tables_and_views_list()) - set(self.get_tables_name_list())
 		for view in list(view_set):
 			mycol = mongodb_connection[view]
@@ -251,7 +248,7 @@ class SchemaConversion:
 					sub_dict = {}
 					sub_dict[col_name] = data
 					enum_col_dict[table_name] = sub_dict
-		db_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname) 
+		db_connection = open_connection_mongodb(self.schema_conv_output_option) 
 		for table in self.get_tables_and_views_list():
 			db_connection.create_collection(table)
 		for table in table_cols_uuid:
@@ -337,7 +334,7 @@ class SchemaConversion:
 					idx_table_name_type_dict[table_name] = {}
 				idx_table_name_type_dict[table_name][idx_name] = idx_type
 		col_dict = self.get_columns_dict()
-		mongodb_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname) 
+		mongodb_connection = open_connection_mongodb(self.schema_conv_output_option) 
 		for table in self.tables_schema:
 			collection = mongodb_connection[table["name"]]
 			index_list = table["indexes"]
@@ -519,7 +516,7 @@ class SchemaConversion:
 					}
 					converted_schema["foreign-keys"].append(foreign_key_info)
 		
-		mongodb_connection = open_connection_mongodb(self.schema_conv_output_option.host, self.schema_conv_output_option.port, self.schema_conv_output_option.dbname) 
+		mongodb_connection = open_connection_mongodb(self.schema_conv_output_option) 
 		store_json_to_mongodb(mongodb_connection, "schema_view", converted_schema)
 		print(f"Save schema view from {self.schema_conv_output_option.dbname} database to MongoDB successfully!")
 		return True

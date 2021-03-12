@@ -145,7 +145,7 @@ def taskDataConv(**kwargs):
 
         os.system(f"mkdir -p mongodump_files")
         os.system(
-            f"mongodump --username {mongodb_username} --password {mongodb_password} --host {mongodb_host} --port {mongodb_port} --authenticationDatabase admin --db {mongodb_dbname} -o mongodump_files/")
+            f"mongodump --username {mongodb_username} --password {mongodb_password} --host {mongodb_host} --port {mongodb_port} --authenticationDatabase admin --db {mongodb_dbname} --forceTableScan -o mongodump_files/")
         os.chdir("./mongodump_files")
         os.system(f"zip -r {schema_name}.zip {schema_name}/*")
 
