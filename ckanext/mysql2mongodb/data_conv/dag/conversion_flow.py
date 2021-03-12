@@ -32,8 +32,8 @@ def taskPrepare(**kwargs):
 
         # change dir
         os.system("whoami")
-        # LOCATION = "/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
-        LOCATION = "/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
+        LOCATION = "/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
+        # LOCATION = "/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
         os.chdir(LOCATION)
 
         # Read configurations
@@ -81,8 +81,8 @@ def taskSchemaConv(**kwargs):
             kwargs)
 
         os.system("whoami")
-        # LOCATION = "/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
-        LOCATION = "/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
+        LOCATION = "/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
+        # LOCATION = "/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
         os.chdir(LOCATION)
 
         schema_conv_init_option = ConvInitOption(
@@ -131,8 +131,8 @@ def taskDataConv(**kwargs):
         mongodb_dbname = schema_name
 
         os.system("whoami")
-        # LOCATION = "/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
-        LOCATION = "/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
+        LOCATION = "/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
+        # LOCATION = "/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
         os.chdir(LOCATION)
 
         schema_conv_init_option = ConvInitOption(
@@ -171,8 +171,8 @@ def taskUploadResult(**kwargs):
             task_ids='taskSchemaConv', key='schema_conv_init_option'))
 
         os.system("whoami")
-        # LOCATION = "/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
-        LOCATION = "/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
+        LOCATION = "/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
+        # LOCATION = "/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
         os.chdir(LOCATION)
 
         mongodb_host = db_conf["mongodb_host"]
