@@ -1,4 +1,4 @@
-from .core.database_function import DatabaseFunctions, DatabaseFunctionsOptions
+from .database_function import DatabaseFunctions, DatabaseFunctionsOptions
 from .mysql.database_functions import MysqlDatabaseFunctions
 from .mongo.database_functions import MongoDatabaseFunctions
 

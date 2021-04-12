@@ -1,12 +1,12 @@
-from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
-from ckanext.mysql2mongodb.data_conv.database_connection import ConvInitOption, ConvOutputOption
-from ckanext.mysql2mongodb.data_conv.data_conversion import DataConversion
-from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql
 import urllib, json, re, os, requests
 from pprint import pprint
 
-def read_package_config(file_url = "package_config.txt"):
+from ckanext.mysql2mongodb.data_conv.core.database_connection import ConvInitOption, ConvOutputOption
+from ckanext.mysql2mongodb.data_conv.core.utilities import open_connection_mysql
+
+def read_package_config(file_url = "./core/package_config.txt"):
     package_conf = {}
+    
     with open(file_url, "r") as f:
         lines = f.readlines()
 
@@ -18,12 +18,13 @@ def read_package_config(file_url = "package_config.txt"):
         look_for_conf = re.search("^X-CKAN-API-Key", line.strip(), re.IGNORECASE)
         if look_for_conf is not None:
             package_conf["X-CKAN-API-Key"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
-
+    
     return package_conf
 
 def read_database_config():
     db_conf = {}
-    file_url = "database_config.txt"
+    
+    file_url = "./core/database_config.txt"
     with open(file_url, "r") as f:
         lines = f.readlines()
 
@@ -59,5 +60,5 @@ def read_database_config():
         look_for_conf = re.search("^mongodb_password", line.strip(), re.IGNORECASE)
         if look_for_conf is not None:
             db_conf["mongodb_password"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
-
+    
     return db_conf

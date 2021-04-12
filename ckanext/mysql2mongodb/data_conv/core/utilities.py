@@ -4,7 +4,8 @@ import mysql.connector
 from pymongo import MongoClient
 import json 
 import sys
- 		 
+
+
 def extract_dict(selected_keys):
 	"""
 	Extract selected-by-key fields from dict.
@@ -16,7 +17,7 @@ def extract_dict(selected_keys):
 			output_dict[str(key)] = input_dict[str(key)]
 		return output_dict
 	return extract_dict
-  
+
 def import_json_to_mongodb(db_connection, collection_name, dbname, json_filename, import_dataset=False):
 	"""
 	Import intermediate JSON file, which was generated and saved at path "./intermediate/<database-name>", into MongoDB.

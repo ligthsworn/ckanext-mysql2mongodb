@@ -1,14 +1,9 @@
-from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
-from ckanext.mysql2mongodb.data_conv.database_connection import ConvInitOption, ConvOutputOption
-from ckanext.mysql2mongodb.data_conv.data_conversion import DataConversion
-from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql
-from pprint import pprint
 import json
+from pprint import pprint
+from datetime import date, datetime
+
 
 from airflow.api.client.local_client import Client
-
-from ckanext.mysql2mongodb.data_conv.dag.flow import create_dag
-from datetime import date, datetime
 
 
 def convert_data(resource_id, sql_file_name, sql_file_url, package_id):

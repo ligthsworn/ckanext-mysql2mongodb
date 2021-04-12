@@ -3,16 +3,19 @@ import json
 import bson
 import re
 import time
-from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
-from ckanext.mysql2mongodb.data_conv.utilities import open_connection_mysql, open_connection_mongodb, import_json_to_mongodb, extract_dict, store_json_to_mongodb, load_mongodb_collection
+import pprint
+
 from bson.decimal128 import Decimal128
 from decimal import Decimal
 from bson import BSON
 from datetime import datetime
 from multiprocessing import Pool
 from itertools import repeat
-from ckanext.mysql2mongodb.data_conv.interfaces.AbstractDataConversion import AbstractDataConversion
-import pprint
+
+
+from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
+from ckanext.mysql2mongodb.data_conv.core.utilities import open_connection_mysql, open_connection_mongodb, import_json_to_mongodb, extract_dict, store_json_to_mongodb, load_mongodb_collection
+from ckanext.mysql2mongodb.data_conv.core.interfaces.AbstractDataConversion import AbstractDataConversion
 
 
 class DataConversion (AbstractDataConversion):

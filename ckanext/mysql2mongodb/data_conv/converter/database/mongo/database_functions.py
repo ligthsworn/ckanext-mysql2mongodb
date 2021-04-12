@@ -2,7 +2,8 @@
 
 # database_config.py: Classes which are used for construct database connection
 import os
-from ..core.database_function import DatabaseFunctions, DatabaseFunctionsOptions
+import subprocess
+from ..database_function import DatabaseFunctions, DatabaseFunctionsOptions
 
 
 class MongoDatabaseFunctions(DatabaseFunctions):
@@ -18,6 +19,6 @@ class MongoDatabaseFunctions(DatabaseFunctions):
         pass
 
     def backup(self, filePath):
-        os.system(
-            f"mongodump --username {self.options.username} --password {self.options.password} --host {self.options.host} --port {self.options.port} --authenticationDatabase admin --db {self.options.dbname} --forceTableScan -o {filePath}")
+        subprocess.run(
+            [f"mongodump --username {self.options.username} --password {self.options.password} --host {self.options.host} --port {self.options.port} --authenticationDatabase admin --db {self.options.dbname} --forceTableScan -o {filePath}"], check=True, shell=True)
         pass
