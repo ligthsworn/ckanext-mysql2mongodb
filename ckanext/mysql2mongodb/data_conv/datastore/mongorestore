@@ -1,0 +1,1 @@
+mongorestore --uri mongodb+srv://admin:<PASSWORD>@cluster0.0zpme.mongodb.net -d <database-name> <path-to-dump-folder>

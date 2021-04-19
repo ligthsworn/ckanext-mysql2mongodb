@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dataconv>
+    <package_id>mysql2mongodb</package_id>
+    <X-CKAN-API-KEY>ba3f9de9-b8b7-4538-a6c3-1508300c8b0b</X-CKAN-API-KEY>
+    <mysql>
+        <host>mysql</host>
+        <username>root</username>
+        <password>password</password>
+        <port>3306</port>
+    </mysql>
+    <mongodb>
+        <host>mongo</host>
+        <username>admin</username>
+        <password>password</password>
+        <port>27017</port>
+    </mongodb>
+</dataconv>

@@ -1,64 +1,47 @@
-import urllib, json, re, os, requests
+import urllib
+import json
+import re
+import os
+import requests
 from pprint import pprint
+import xmltodict
 
-from ckanext.mysql2mongodb.data_conv.core.database_connection import ConvInitOption, ConvOutputOption
-from ckanext.mysql2mongodb.data_conv.core.utilities import open_connection_mysql
 
-def read_package_config(file_url = "./core/package_config.txt"):
-    package_conf = {}
-    
-    with open(file_url, "r") as f:
+FILE_URL = "./core/config.xml"
+
+
+def getConfig():
+    with open(FILE_URL, "r") as f:
         lines = f.readlines()
-
+    temp = ''
     for line in lines:
-        look_for_conf = re.search("^package_id", line.strip(), re.IGNORECASE)
-        if look_for_conf is not None:
-            package_conf["package_id"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+        temp += line
+    config = xmltodict.parse(temp)
+    return config
 
-        look_for_conf = re.search("^X-CKAN-API-Key", line.strip(), re.IGNORECASE)
-        if look_for_conf is not None:
-            package_conf["X-CKAN-API-Key"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
-    
+
+def read_package_config():
+    package_conf = {}
+    config = getConfig()
+    package_conf["package_id"] = config['dataconv']['package_id']
+    package_conf["X-CKAN-API-Key"] = config['dataconv']['X-CKAN-API-KEY']
+
     return package_conf
+
 
 def read_database_config():
     db_conf = {}
-    
-    file_url = "./core/database_config.txt"
-    with open(file_url, "r") as f:
-        lines = f.readlines()
 
-    for line in lines:
-        look_for_conf = re.search("^mysql_host", line.strip(), re.IGNORECASE)
-        if look_for_conf is not None:
-            db_conf["mysql_host"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+    config = getConfig()
 
-        look_for_conf = re.search("^mysql_port", line.strip(), re.IGNORECASE)
-        if look_for_conf is not None:
-            db_conf["mysql_port"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+    db_conf["mysql_host"] = config['dataconv']['mysql']['host']
+    db_conf["mysql_port"] = config['dataconv']['mysql']['port']
+    db_conf["mysql_password"] = config['dataconv']['mysql']['password']
+    db_conf["mysql_username"] = config['dataconv']['mysql']['username']
 
-        look_for_conf = re.search("^mysql_password", line.strip(), re.IGNORECASE)
-        if look_for_conf is not None:
-            db_conf["mysql_password"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
+    db_conf["mongodb_host"] = config['dataconv']['mongodb']['host']
+    db_conf["mongodb_port"] = config['dataconv']['mongodb']['port']
+    db_conf["mongodb_username"] = config['dataconv']['mongodb']['username']
+    db_conf["mongodb_password"] = config['dataconv']['mongodb']['password']
 
-        look_for_conf = re.search("^mysql_username", line.strip(), re.IGNORECASE)
-        if look_for_conf is not None:
-            db_conf["mysql_username"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
-
-        look_for_conf = re.search("^mongodb_host", line.strip(), re.IGNORECASE)
-        if look_for_conf is not None:
-            db_conf["mongodb_host"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
-
-        look_for_conf = re.search("^mongodb_username", line.strip(), re.IGNORECASE)
-        if look_for_conf is not None:
-            db_conf["mongodb_username"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
-
-        look_for_conf = re.search("^mongodb_port", line.strip(), re.IGNORECASE)
-        if look_for_conf is not None:
-            db_conf["mongodb_port"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
-
-        look_for_conf = re.search("^mongodb_password", line.strip(), re.IGNORECASE)
-        if look_for_conf is not None:
-            db_conf["mongodb_password"] = re.split(r'[\s]+=[\s]+', line.strip())[1][1:-1]
-    
     return db_conf
