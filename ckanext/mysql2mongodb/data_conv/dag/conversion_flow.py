@@ -10,14 +10,13 @@ from airflow.operators.dummy_operator import DummyOperator
 from airflow.operators.python_operator import PythonOperator
 
 from ckanext.mysql2mongodb.data_conv.core.helper import read_package_config, read_database_config
-from ckanext.mysql2mongodb.data_conv.core.utilities import open_connection_mysql
 from ckanext.mysql2mongodb.data_conv.core.database_connection import ConvInitOption, ConvOutputOption
-from ckanext.mysql2mongodb.data_conv.schema_conversion import SchemaConversion
-from ckanext.mysql2mongodb.data_conv.data_conversion import DataConversion
-
-
 from ckanext.mysql2mongodb.data_conv.converter.database.factory import getDatabaseFuntions
 from ckanext.mysql2mongodb.data_conv.converter.database.database_function import DatabaseFunctionsOptions
+
+from ckanext.mysql2mongodb.data_conv.converter.core.mysql.schema_conversion import SchemaConversion
+from ckanext.mysql2mongodb.data_conv.converter.core.mysql.data_conversion import DataConversion
+from ckanext.mysql2mongodb.data_conv.converter.core.mysql.mysqlData_import import MySQLSchemaImportConversion
 
 # Get Airflow Logger
 logger = logging.getLogger("airflow.task")
@@ -206,6 +205,48 @@ def taskUploadResult(**kwargs):
         raise exception
 
 
+def taskSchemaImport(**kwargs):
+    try:
+        _, _, _, db_conf, schema_name, source_host, source_username, source_password, source_port, source_dbname = pull_from_xcom(
+            kwargs)
+
+        subprocess.run(["whoami"], check=True, shell=True)
+        LOCATION = "/srv/app/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
+        # LOCATION = "/usr/lib/ckan/default/src/ckanext-mysql2mongodb/ckanext/mysql2mongodb/data_conv"
+        os.chdir(LOCATION)
+
+        schema_conv_init_option = ConvInitOption(
+            host=source_host, username=source_username, password=source_password, port=source_port, dbname=source_dbname)
+
+        mongodb_host = db_conf["mongodb_host"]
+        mongodb_username = db_conf["mongodb_username"]
+        mongodb_password = db_conf["mongodb_password"]
+        mongodb_port = db_conf["mongodb_port"]
+        mongodb_dbname = schema_name
+
+        schema_conv_output_option = ConvOutputOption(
+            host=mongodb_host, username=mongodb_username, password=mongodb_password, port=mongodb_port, dbname=mongodb_dbname)
+
+        schema_conversion = MySQLSchemaImportConversion()
+
+
+        schema_conversion.set_config(
+            schema_conv_init_option, schema_conv_output_option)
+        schema_conversion.run()
+
+        kwargs['ti'].xcom_push(key='schema_conv_init_option',
+                               value=jsonpickle.encode(schema_conv_init_option))
+        kwargs['ti'].xcom_push(key='schema_conv_output_option',
+                               value=jsonpickle.encode(schema_conv_output_option))
+        kwargs['ti'].xcom_push(key='schema_conversion',
+                               value=jsonpickle.encode(schema_conversion))
+
+    except Exception as exception:
+        logger.error("Error Occure in taskDataConv Task!")
+        logger.error(str(exception))
+        raise exception
+
+
 def pull_from_xcom(kwargs):
     resource_id = kwargs['ti'].xcom_pull(
         task_ids='taskPrepare', key='resource_id')
@@ -229,19 +270,19 @@ def pull_from_xcom(kwargs):
     return resource_id, sql_file_name, sql_file_url, db_conf, schema_name, mysql_host, mysql_username, mysql_password, mysql_port, mysql_dbname
 
 
-def push_to_xcom(kwargs, resource_id, sql_file_name, sql_file_url, db_conf, package_conf, CKAN_API_KEY, schema_name, mysql_host, mysql_username, mysql_password, mysql_port, mysql_dbname):
+def push_to_xcom(kwargs, resource_id, source_file_name, source_file_url, db_conf, package_conf, CKAN_API_KEY, schema_name, source_host, source_username, source_password, source_port, source_dbname):
     kwargs['ti'].xcom_push(key='resource_id', value=resource_id)
-    kwargs['ti'].xcom_push(key='sql_file_name', value=sql_file_name)
-    kwargs['ti'].xcom_push(key='sql_file_url', value=sql_file_url)
+    kwargs['ti'].xcom_push(key='sql_file_name', value=source_file_name)
+    kwargs['ti'].xcom_push(key='sql_file_url', value=source_file_url)
     kwargs['ti'].xcom_push(key='db_conf', value=db_conf)
     kwargs['ti'].xcom_push(key='package_conf', value=package_conf)
     kwargs['ti'].xcom_push(key='CKAN_API_KEY', value=CKAN_API_KEY)
     kwargs['ti'].xcom_push(key='schema_name', value=schema_name)
-    kwargs['ti'].xcom_push(key='mysql_host', value=mysql_host)
-    kwargs['ti'].xcom_push(key='mysql_username', value=mysql_username)
-    kwargs['ti'].xcom_push(key='mysql_password', value=mysql_password)
-    kwargs['ti'].xcom_push(key='mysql_port', value=mysql_port)
-    kwargs['ti'].xcom_push(key='mysql_dbname', value=mysql_dbname)
+    kwargs['ti'].xcom_push(key='mysql_host', value=source_host)
+    kwargs['ti'].xcom_push(key='mysql_username', value=source_username)
+    kwargs['ti'].xcom_push(key='mysql_password', value=source_password)
+    kwargs['ti'].xcom_push(key='mysql_port', value=source_port)
+    kwargs['ti'].xcom_push(key='mysql_dbname', value=source_dbname)
 
 
 dag = DAG('conversion_flow', description='Basic Conversion Flow',

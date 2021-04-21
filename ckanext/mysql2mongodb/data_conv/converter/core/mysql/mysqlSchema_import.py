@@ -58,7 +58,7 @@ class MySQLSchemaImportConversion(AbstractSchemaConversion):
     """
     MySQL Database Schema class.
     This class is used for
-            - Extracting schema from MySQL database. 
+            - Extracting schema from MySQL database.
             - Exporting MySQL schema as JSON.
             - Storing MySQL schema as a collection in MongoDB database.
             - Loading MySQL schema, which was stored in MongoDB before, for another processes.
@@ -68,7 +68,7 @@ class MySQLSchemaImportConversion(AbstractSchemaConversion):
     """
 
     def __init__(self):
-        super(AbstractSchemaConversion, self).__init__()
+        super(MySQLSchemaImportConversion, self).__init__()
         # Define a name for schema file, which will be place at intermediate folder.
         self.schema_filename = "schema.json"
 
@@ -81,16 +81,16 @@ class MySQLSchemaImportConversion(AbstractSchemaConversion):
         self.schema_conv_init_option = schema_conv_init_option
         self.schema_conv_output_option = schema_conv_output_option
 
+    def get(self):
+        self.load_schema()
+        return self.db_schema
+
     def run(self):
         self.__generate_mysql_schema()
         self.create_mongo_schema_validators()
         self.create_mongo_indexes()
         self.drop_view()
         return True
-
-    def get(self):
-        self.load_schema()
-        return self.db_schema
 
     def load_schema(self):
         """
@@ -128,16 +128,6 @@ class MySQLSchemaImportConversion(AbstractSchemaConversion):
         subprocess.call(['sh', command])
         print(
             f"Generate MySQL database {self.schema_conv_init_option.dbname} successfully!")
-        return True
-
-    def drop_view(self):
-        mongodb_connection = open_connection_mongodb(
-            self.schema_conv_output_option)
-        view_set = set(self.get_tables_and_views_list()) - \
-            set(self.get_tables_name_list())
-        for view in list(view_set):
-            mycol = mongodb_connection[view]
-            mycol.drop()
         return True
 
     def extract_tables_schema(self, extracted_keys_list=["@uuid", "name", "columns", "foreign-keys"]):
@@ -257,194 +247,6 @@ class MySQLSchemaImportConversion(AbstractSchemaConversion):
                 res[table_dict[col["@uuid"]]][col["name"]
                                               ] = schema_type_dict[dtype]
         return res
-
-    def create_mongo_schema_validators(self):
-        """
-        Specify MongoDB schema validator for all tables.
-        """
-        table_view_column_dtype = self.get_table_column_and_data_type()
-        table_list = self.get_tables_name_list()
-        uuid_col_dict = self.get_columns_dict()
-        table_column_dtype = {}
-        for table in table_list:
-            table_column_dtype[table] = table_view_column_dtype[table]
-        table_cols_uuid = {}
-        for table in self.tables_schema:
-            table_name = table["name"]
-            if table_name in table_list:
-                table_cols_uuid[table_name] = table["columns"]
-        enum_col_dict = {}
-        for col in self.all_table_columns:
-            if col["attributes"]["COLUMN_TYPE"][:4] == "enum":
-                data = {}
-                table_name, col_name = col["short-name"].split(".")[:2]
-                if table_name in table_list:
-                    data = list(
-                        map(lambda ele: ele[1:-1], col["attributes"]["COLUMN_TYPE"][5:-1].split(",")))
-                    sub_dict = {}
-                    sub_dict[col_name] = data
-                    enum_col_dict[table_name] = sub_dict
-        db_connection = open_connection_mongodb(self.schema_conv_output_option)
-        for table in self.get_tables_and_views_list():
-            db_connection.create_collection(table)
-        for table in table_cols_uuid:
-            props = {}
-            for col_uuid in table_cols_uuid[table]:
-                col_name = uuid_col_dict[col_uuid]
-                mysql_dtype = table_column_dtype[table][col_name]
-                if mysql_dtype == "ENUM":
-                    data = {
-                        "enum": enum_col_dict[table][col_name],
-                        "description": "can only be one of the enum values"
-                    }
-                else:
-                    data = {
-                        "bsonType": self.data_type_schema_mapping(mysql_dtype)
-                    }
-                props[col_name] = data
-                json_schema = {}
-                json_schema["bsonType"] = "object"
-                json_schema["properties"] = props
-                # print(json_schema)
-                vexpr = {"$jsonSchema": json_schema}
-                cmd = OrderedDict([('collMod', table), ('validator', vexpr)])
-                db_connection.command(cmd)
-
-    def data_type_schema_mapping(self, mysql_type):
-        """
-        Mapping data type from MySQL to MongoDB.
-        Input: MySQL data type.
-        Output: MongoDB data type.
-        """
-        dtype_dict = {}
-        dtype_dict["int"] = ["BIT", "TINYINT", "SMALLINT",
-                             "MEDIUMINT", "INT", "INTEGER", "YEAR", "BOOL", "BOOLEAN"]
-        dtype_dict["long"] = ["BIGINT"]
-        dtype_dict["decimal"] = ["DECIMAL", "DEC", "FIXED"]
-        dtype_dict["double"] = ["FLOAT", "DOUBLE", "REAL"]
-        # dtype_dict["bool"] = []
-        dtype_dict["date"] = ["DATE", "DATETIME", "TIMESTAMP", "TIME"]
-        # dtype_dict["timestamp"] = []
-        dtype_dict["binData"] = ["BINARY", "VARBINARY",
-                                 "TINYBLOB", "BLOB", "MEDIUMBLOB", "LONGBLOB"]
-        # dtype_dict["blob"] = []
-        dtype_dict["string"] = ["JSON", "CHARACTER", "CHARSET", "ASCII", "UNICODE", "CHAR", "VARCHAR", "TINYTEXT", "TEXT", "MEDIUMTEXT",
-                                "LONGTEXT", "GEOMETRY", "POINT", "LINESTRING", "POLYGON", "MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON", "GEOMETRYCOLLECTION"]
-        dtype_dict["object"] = ["ENUM"]
-        dtype_dict["array"] = ["SET"]
-        # dtype_dict["single-geometry"] = []
-        # dtype_dict["multiple-geometry"] = []
-
-        for mongodb_type in dtype_dict.keys():
-            if mysql_type in dtype_dict[mongodb_type]:
-                # print(mysql_type, mongodb_type)
-                return mongodb_type
-        print(f"MySQL data type {mysql_type} has not been handled!")
-        return None
-
-    def create_mongo_indexes(self):
-        """
-        Add index to MongoDB collection.
-        Just use for running time. Need to remove indexes before exporting MongoDB database.
-        """
-        table_view_list = self.get_tables_and_views_list()
-
-        mysql_connection = open_connection_mysql(
-            self.schema_conv_init_option.host,
-            self.schema_conv_init_option.username,
-            self.schema_conv_init_option.password,
-            self.schema_conv_init_option.dbname,
-        )
-        mysql_cursor = mysql_connection.cursor()
-        # Get indexes from MySQL by using SQL command because SchemaCrawler have not get enough information about indexes
-        sql_fetch_index = f"SELECT DISTINCT TABLE_NAME, INDEX_NAME, INDEX_TYPE FROM INFORMATION_SCHEMA. STATISTICS;"
-        mysql_cursor.execute(sql_fetch_index)
-        record = mysql_cursor.fetchall()
-        idx_table_name_type_dict = {}
-        for row in record:
-            table_name, idx_name, idx_type = row
-            # print(row)
-            if table_name in table_view_list:
-                if not table_name in idx_table_name_type_dict:
-                    # if table_name == "actor":
-                    # print(idx_table_name_type_dict)
-                    # print(idx_name)
-                    idx_table_name_type_dict[table_name] = {}
-                idx_table_name_type_dict[table_name][idx_name] = idx_type
-        col_dict = self.get_columns_dict()
-        mongodb_connection = open_connection_mongodb(
-            self.schema_conv_output_option)
-        for table in self.tables_schema:
-            collection = mongodb_connection[table["name"]]
-            index_list = table["indexes"]
-            for index in index_list:
-                if(type(index) is not str):  # need to check all indexes again
-                    # print(index)
-                    if table["name"] in idx_table_name_type_dict:
-                        index_name = index["name"]
-                        index_type = idx_table_name_type_dict[table["name"]][index_name]
-                        index_unique = index["unique"]
-                        index_cols = index["columns"]
-                        num_sub_index = len(index_cols)
-                        if index_type == "BTREE":
-                            if num_sub_index == 1:
-                                # mongo_index_type = "default"
-                                col_name = col_dict[index_cols[0]]
-                                # print(type(col_name))
-                                # collection.create_index("idx_" + col_name, unique = index_unique)
-                                if col_name != "_id":
-                                    collection.create_index(
-                                        col_name, unique=index_unique)
-                            else:
-                                # mongo_index_type = "compound"
-                                # index_keys = {}
-                                # for idx_uuid in index_cols:
-                                # index_keys[col_dict[idx_uuid]] = 1
-                                collection.create_index(
-                                    [(col_dict[idx_uuid], 1) for idx_uuid in index_cols], unique=index_unique)
-                        # elif index_type == "SPATIAL":
-                        # 	# mongo_index_type = "spatial"
-                        # 	# print(col_dict[index_cols[0]])
-                        # 	if num_sub_index == 1:
-                        # 		# collection.create_index([(col_dict[index_cols[0]], GEO2D)], unique = index_unique)
-                        # 		collection.create_index([(col_dict[index_cols[0]], "2dsphere")], unique = index_unique)
-                        # 	else:
-                        # 		collection.create_index([(col_dict[idx_uuid], TEXT) for idx_uuid in index_cols], unique = index_unique)
-                        # 	pass
-                        # elif index_type == "FULLTEXT":
-                        # 	# mongo_index_type = "text-index"
-                        # 	if num_sub_index == 1:
-                        # 		collection.create_index(col_dict[index_cols[0]], TEXT, unique = index_unique)
-                        # 	else:
-                        # 		collection.create_index([(col_dict[idx_uuid], TEXT) for idx_uuid in index_cols], unique = index_unique)
-                        # else:
-                            # print(f"MySQL index type {index_type} has not been handled!")
-
-    def get_coluuid(self, table_name, col_name):
-        """
-        Get column uuid:
-        Input: Table name and column name.
-        Output: Column uuid
-        """
-        self.load_schema()
-        for col in self.all_table_columns():
-            if f"{table_name}.{col_name}" == col["short-name"]:
-                return col["@uuid"]
-        print(f"Can not find column {col_name} from table {table_name}!")
-        return None
-
-    def get_col_type_from_schema_attribute(self, table_name, col_name):
-        """
-        Get MySQL column data type from schema.
-        Input: Table name and column name.
-        Output: MySQL data type of column.
-        """
-        self.load_schema()
-        for col in self.all_table_columns:
-            if f"{table_name}.{col_name}" == col["short-name"]:
-                return col["attributes"]["COLUMN_TYPE"]
-        print(f"Can not find column {col_name} from table {table_name}!")
-        return None
 
     def get_schema_standardlized(self):
         """
