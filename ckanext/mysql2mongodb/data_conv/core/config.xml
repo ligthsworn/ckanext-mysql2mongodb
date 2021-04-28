@@ -8,10 +8,10 @@
         <password>password</password>
         <port>3306</port>
     </mysql>
-    <mongodb>
-        <host>mongo</host>
+    <datastore>
+        <host>datastore</host>
         <username>admin</username>
         <password>password</password>
         <port>27017</port>
-    </mongodb>
+    </datastore>
 </dataconv>

@@ -8,6 +8,7 @@ from pymongo import GEO2D, TEXT
 
 
 from ckanext.mysql2mongodb.data_conv.core.utilities import open_connection_mongodb, load_mongodb_collection
+from ckanext.mysql2mongodb.data_conv.core.helper import store_collection_to_DS
 
 
 from ckanext.mysql2mongodb.data_conv.core.interfaces.AbstractSchemaConversion import AbstractSchemaConversion
@@ -87,9 +88,22 @@ class MySQLSchemaImportConversion(AbstractSchemaConversion):
 
     def run(self):
         self.__generate_mysql_schema()
-        self.create_mongo_schema_validators()
-        self.create_mongo_indexes()
-        self.drop_view()
+        return True
+
+    def save(self):
+        """
+        Save MySQL schema which was generate by SchemaCrawler to MongoDB database
+        """
+        db_connection = open_connection_mongodb(self.schema_conv_output_option)
+        # print("Ready
+        with open(f"./intermediate_data/{self.schema_conv_output_option.dbname}/{self.schema_filename}") as file:
+            file_data = json.load(file)
+            collections = [('schema', file_data)]
+            store_collection_to_DS(
+                collections, self.schema_conv_output_option.dbname)
+
+        print(
+            f"Save schema from {self.schema_conv_output_option.dbname} database to MongoDB successfully!")
         return True
 
     def load_schema(self):
@@ -113,7 +127,7 @@ class MySQLSchemaImportConversion(AbstractSchemaConversion):
         subprocess.run(
             [f"mkdir -p ./intermediate_data/{self.schema_conv_init_option.dbname}"], check=True, shell=True)
 
-        command = f"./_schemacrawler/schemacrawler.sh \
+        command = f"./core/_schemacrawler/schemacrawler.sh \
 		--server=mysql \
 		--host={self.schema_conv_init_option.host} \
 		--port={self.schema_conv_init_option.port} \
@@ -125,7 +139,9 @@ class MySQLSchemaImportConversion(AbstractSchemaConversion):
 		--command=serialize\
 		--output-file=./intermediate_data/{self.schema_conv_init_option.dbname}/{self.schema_filename}"
 
-        subprocess.call(['sh', command])
+        print('command')
+        print(os.getcwd())
+        subprocess.run([command], check=True, shell=True)
         print(
             f"Generate MySQL database {self.schema_conv_init_option.dbname} successfully!")
         return True

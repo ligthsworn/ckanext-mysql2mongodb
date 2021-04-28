@@ -43,10 +43,10 @@ def read_database_config():
     db_conf["mysql_password"] = config['dataconv']['mysql']['password']
     db_conf["mysql_username"] = config['dataconv']['mysql']['username']
 
-    db_conf["mongodb_host"] = config['dataconv']['mongodb']['host']
-    db_conf["mongodb_port"] = config['dataconv']['mongodb']['port']
-    db_conf["mongodb_username"] = config['dataconv']['mongodb']['username']
-    db_conf["mongodb_password"] = config['dataconv']['mongodb']['password']
+    db_conf["datastore_host"] = config['dataconv']['datastore']['host']
+    db_conf["datastore_port"] = config['dataconv']['datastore']['port']
+    db_conf["datastore_username"] = config['dataconv']['datastore']['username']
+    db_conf["datastore_password"] = config['dataconv']['datastore']['password']
 
     return db_conf
 
@@ -54,11 +54,11 @@ def read_database_config():
 def getDSClient():
     cfg = read_database_config()
 
-    connection_string = f"mongodb://{cfg.mongodb_host}:{cfg.mongodb_port}/"
+    connection_string = f"mongodb://{cfg['datastore_host']}:{cfg['datastore_port']}/"
     try:
         # Making connection
         mongo_client = MongoClient(
-            connection_string, username=cfg.mongodb_username, password=cfg.mongodb_password)
+            connection_string, username=cfg['datastore_username'], password=cfg['datastore_password'])
         return mongo_client
     except Exception as e:
         logger = logging.getLogger(__name__)
@@ -88,12 +88,12 @@ def store_collection_to_DS(collections, dbs_name):
             collection_data = collection[1]
 
             if isinstance(collection_data, list):
-                ds_connection.insert_many(collection_data)
+                ds_connection[collection_name].insert_many(collection_data)
                 # Collection.insert_many(json_data, ordered=False)
             else:
-                ds_connection.insert_one(collection_data)
-            print(
-                f"Write JSON data to MongoDB collection {collection_name} successfully!")
+                ds_connection[collection_name].insert_one(collection_data)
+                print(
+                    f"Write JSON data to Datastore collection {collection_name} successfully!")
             return True
     except Exception as e:
         logger = logging.getLogger(__name__)

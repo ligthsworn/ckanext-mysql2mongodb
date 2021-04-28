@@ -4,6 +4,7 @@ import bson
 import re
 import time
 import pprint
+import logging
 
 from bson.decimal128 import Decimal128
 from decimal import Decimal
@@ -16,7 +17,7 @@ import mysql.connector
 from pymongo import MongoClient
 
 from ckanext.mysql2mongodb.data_conv.core.interfaces.AbstractDataConversion import AbstractDataConversion
-from ckanenxt.mysql2mongodbdata_conv.core.helper import store_collection_to_DS
+from ckanext.mysql2mongodb.data_conv.core.helper import store_collection_to_DS
 
 
 def extract_dict(selected_keys):
@@ -193,14 +194,17 @@ class MysqlDataImportConversion (AbstractDataConversion):
         migrate_data = []
         for table in self.schema.get_tables_name_list():
             collection = self.migrate_one_table_to_collection(table)
-            migrate_data += (table, collection)
-        store_collection_to_DS(migrate_data, self.schema_conv_output_option.dbname)
+            element = (table, collection)
+            migrate_data.append(element)
+        store_collection_to_DS(
+            migrate_data, self.schema_conv_output_option.dbname)
 
     def migrate_one_table_to_collection(self, table_name):
         try:
             fetched_data_list = self.get_fetched_data_list(table_name)
             convert_data_list = self.store_fetched_data_to_mongodb(
                 table_name, fetched_data_list)
+
             return convert_data_list
         except Exception as e:
             raise e
