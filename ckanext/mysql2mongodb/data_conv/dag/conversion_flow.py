@@ -325,7 +325,7 @@ def taskDumpData(**kwargs):
 
 def branch_func(**kwargs):
     target = kwargs['dag_run'].conf.get('target')
-    if target == 'MONGO':
+    if target != 'MONGO':
         return ['taskSchemaExport', 'taskDataExport', 'taskDumpData']
     else:
         return 'taskDumpData'
