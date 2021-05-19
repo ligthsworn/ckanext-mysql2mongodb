@@ -48,6 +48,12 @@ def read_database_config():
     db_conf["datastore_username"] = config['dataconv']['datastore']['username']
     db_conf["datastore_password"] = config['dataconv']['datastore']['password']
 
+    db_conf["redis_host"] = config['dataconv']['redis']['host']
+    db_conf["redis_port"] = config['dataconv']['redis']['port']
+    db_conf["redis_username"] = config['dataconv']['redis']['username']
+    db_conf["redis_password"] = config['dataconv']['redis']['password']
+
+
     return db_conf
 
 
@@ -94,7 +100,7 @@ def store_collection_to_DS(collections, dbs_name):
                 ds_connection[collection_name].insert_one(collection_data)
                 print(
                     f"Write JSON data to Datastore collection {collection_name} successfully!")
-            return True
+        return True
     except Exception as e:
         logger = logging.getLogger(__name__)
         logger.error(

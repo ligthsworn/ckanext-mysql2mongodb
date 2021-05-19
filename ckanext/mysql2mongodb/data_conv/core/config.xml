@@ -14,4 +14,10 @@
         <password>password</password>
         <port>27017</port>
     </datastore>
+    <redis>
+        <host>redis_conv</host>
+        <username>root</username>
+        <password>password</password>
+        <port>6379</port>
+    </redis>
 </dataconv>
